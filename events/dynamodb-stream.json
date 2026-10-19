@@ -1,0 +1,40 @@
+{
+  "Records": [
+    {
+      "eventID": "1",
+      "eventName": "INSERT",
+      "eventVersion": "1.1",
+      "eventSource": "aws:dynamodb",
+      "awsRegion": "us-east-1",
+      "dynamodb": {
+        "ApproximateCreationDateTime": 1729000000,
+        "Keys": {
+          "id": {
+            "S": "avaliacao-001"
+          }
+        },
+        "NewImage": {
+          "id": {
+            "S": "avaliacao-001"
+          },
+          "descricao": {
+            "S": "O conteúdo do curso está desatualizado e o suporte não responde"
+          },
+          "nota": {
+            "N": "2"
+          },
+          "urgencia": {
+            "S": "CRITICA"
+          },
+          "dataEnvio": {
+            "S": "2026-10-19T18:00:00Z"
+          }
+        },
+        "SequenceNumber": "111",
+        "SizeBytes": 200,
+        "StreamViewType": "NEW_IMAGE"
+      },
+      "eventSourceARN": "arn:aws:dynamodb:us-east-1:123456789012:table/dev-avaliacoes/stream/2026-10-19T00:00:00.000"
+    }
+  ]
+}

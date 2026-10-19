@@ -1,0 +1,28 @@
+{
+  "resource": "/avaliacao",
+  "path": "/avaliacao",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {
+    "Content-Type": ["application/json"]
+  },
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/avaliacao",
+    "httpMethod": "POST",
+    "path": "/dev/avaliacao",
+    "accountId": "123456789012",
+    "stage": "dev",
+    "requestId": "local-request-id-positiva",
+    "identity": {
+      "sourceIp": "127.0.0.1"
+    }
+  },
+  "body": "{\"descricao\":\"Excelente didática e material bem organizado\",\"nota\":9}",
+  "isBase64Encoded": false
+}
