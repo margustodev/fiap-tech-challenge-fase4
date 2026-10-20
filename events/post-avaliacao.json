@@ -1,0 +1,28 @@
+{
+  "resource": "/avaliacao",
+  "path": "/avaliacao",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {
+    "Content-Type": ["application/json"]
+  },
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/avaliacao",
+    "httpMethod": "POST",
+    "path": "/dev/avaliacao",
+    "accountId": "123456789012",
+    "stage": "dev",
+    "requestId": "local-request-id",
+    "identity": {
+      "sourceIp": "127.0.0.1"
+    }
+  },
+  "body": "{\"descricao\":\"O conteúdo do curso está desatualizado e o suporte não responde\",\"nota\":2}",
+  "isBase64Encoded": false
+}

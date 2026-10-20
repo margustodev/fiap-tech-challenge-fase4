@@ -1,0 +1,366 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  FIAP Tech Challenge Fase 4 - Feedbacks de cursos on-line (serverless).
+  Componentes: API Gateway, Lambda, DynamoDB, SES/SNS, EventBridge e CloudWatch.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, hml, prod]
+  AdminEmail:
+    Type: String
+    Description: E-mail dos administradores para notificações e relatório semanal
+  SenderEmail:
+    Type: String
+    Description: E-mail remetente verificado no Amazon SES
+
+Globals:
+  Function:
+    Runtime: java25
+    Timeout: 30
+    MemorySize: 512
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref EnvironmentName
+        AVALIACOES_TABLE_NAME: !Ref AvaliacoesTable
+        ADMIN_EMAIL: !Ref AdminEmail
+        SENDER_EMAIL: !Ref SenderEmail
+        POWERTOOLS_SERVICE_NAME: feedback-cursos
+
+Resources:
+
+  #############################################################################
+  # Segurança e governança de acesso (IAM least privilege por função)
+  #############################################################################
+
+  FeedbackReceiverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-feedback-receiver-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDbWriteAvaliacoes
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                Resource: !GetAtt AvaliacoesTable.Arn
+
+  CriticalNotifierRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-critical-notifier-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StreamAndNotify
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource: !GetAtt AvaliacoesTable.StreamArn
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref CriticalAlertsTopic
+
+  WeeklyReporterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-weekly-reporter-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReadAvaliacoesAndSendEmail
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:GetItem
+                Resource: !GetAtt AvaliacoesTable.Arn
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
+
+  #############################################################################
+  # Banco de dados (DynamoDB) com criptografia e streams
+  #############################################################################
+
+  AvaliacoesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${EnvironmentName}-avaliacoes'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: dataEnvio
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: dataEnvio-index
+          KeySchema:
+            - AttributeName: dataEnvio
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: fiap-tech-challenge-fase-4
+        - Key: DataClassification
+          Value: customer-feedback
+
+  #############################################################################
+  # Notificações (SNS)
+  #############################################################################
+
+  CriticalAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${EnvironmentName}-critical-feedback-alerts'
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AdminEmail
+
+  #############################################################################
+  # Funções serverless (responsabilidade única)
+  #############################################################################
+
+  FeedbackReceiverFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-feedback-receiver'
+      CodeUri: ../feedback-receiver/target/feedback-receiver-1.0.0-SNAPSHOT.jar
+      Handler: br.com.fiap.techchallenge.fase4.feedback.handler.FeedbackReceiverHandler::handleRequest
+      Role: !GetAtt FeedbackReceiverRole.Arn
+      Description: Recebe POST /avaliacao, valida e persiste feedback
+      Events:
+        PostAvaliacao:
+          Type: Api
+          Properties:
+            Path: /avaliacao
+            Method: POST
+            RestApiId: !Ref FeedbackApi
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+
+  CriticalNotifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-critical-notifier'
+      CodeUri: ../critical-notifier/target/critical-notifier-1.0.0-SNAPSHOT.jar
+      Handler: br.com.fiap.techchallenge.fase4.notifier.handler.CriticalNotificationHandler::handleRequest
+      Role: !GetAtt CriticalNotifierRole.Arn
+      Description: Notifica administradores sobre avaliações críticas
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref CriticalAlertsTopic
+      Events:
+        AvaliacoesStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt AvaliacoesTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName": ["INSERT"]}'
+
+  WeeklyReporterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-weekly-reporter'
+      CodeUri: ../weekly-reporter/target/weekly-reporter-1.0.0-SNAPSHOT.jar
+      Handler: br.com.fiap.techchallenge.fase4.report.handler.WeeklyReportHandler::handleRequest
+      Role: !GetAtt WeeklyReporterRole.Arn
+      Description: Gera relatório semanal com média e estatísticas de feedbacks
+      Timeout: 60
+      Events:
+        WeeklySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 12 ? * MON *)
+            Description: Disparo semanal do relatório de feedbacks (segunda 12:00 UTC)
+            Enabled: true
+
+  #############################################################################
+  # API Gateway
+  #############################################################################
+
+  FeedbackApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub '${EnvironmentName}-feedback-api'
+      StageName: !Ref EnvironmentName
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: false
+          MetricsEnabled: true
+
+  #############################################################################
+  # Monitoramento (CloudWatch Alarms + Dashboard)
+  #############################################################################
+
+  FeedbackReceiverErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-feedback-receiver-errors'
+      AlarmDescription: Erros na função de recebimento de avaliações
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref FeedbackReceiverFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref CriticalAlertsTopic
+      TreatMissingData: notBreaching
+
+  CriticalNotifierErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-critical-notifier-errors'
+      AlarmDescription: Erros na função de notificação crítica
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CriticalNotifierFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref CriticalAlertsTopic
+      TreatMissingData: notBreaching
+
+  WeeklyReporterErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-weekly-reporter-errors'
+      AlarmDescription: Erros na função de relatório semanal
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref WeeklyReporterFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref CriticalAlertsTopic
+      TreatMissingData: notBreaching
+
+  FeedbackDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${EnvironmentName}-feedback-dashboard'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "title": "Invocações das funções",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${FeedbackReceiverFunction}"],
+                  [".", ".", ".", "${CriticalNotifierFunction}"],
+                  [".", ".", ".", "${WeeklyReporterFunction}"]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "title": "Erros das funções",
+                "metrics": [
+                  ["AWS/Lambda", "Errors", "FunctionName", "${FeedbackReceiverFunction}"],
+                  [".", ".", ".", "${CriticalNotifierFunction}"],
+                  [".", ".", ".", "${WeeklyReporterFunction}"]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  ApiEndpoint:
+    Description: Endpoint base da API de avaliações
+    Value: !Sub 'https://${FeedbackApi}.execute-api.${AWS::Region}.amazonaws.com/${EnvironmentName}/avaliacao'
+  AvaliacoesTableName:
+    Description: Nome da tabela DynamoDB de avaliações
+    Value: !Ref AvaliacoesTable
+  CriticalAlertsTopicArn:
+    Description: ARN do tópico SNS de alertas críticos
+    Value: !Ref CriticalAlertsTopic
+  FeedbackDashboardName:
+    Description: Nome do dashboard CloudWatch
+    Value: !Ref FeedbackDashboard
