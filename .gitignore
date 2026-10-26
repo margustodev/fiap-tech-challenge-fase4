@@ -21,7 +21,7 @@
 
 # Build directories
 target/
-out/
+/out/
 
 # IntelliJ IDEA
 .idea/
