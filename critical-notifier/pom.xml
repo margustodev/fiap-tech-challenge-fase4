@@ -1,7 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -12,41 +13,69 @@
 
     <artifactId>critical-notifier</artifactId>
     <name>critical-notifier</name>
-    <description>Função serverless responsável por notificar administradores sobre avaliações críticas</description>
+
+    <description>
+        Funcao serverless responsavel por notificar
+        administradores sobre avaliacoes criticas
+    </description>
 
     <dependencies>
+
+        <!-- Modulo compartilhado -->
         <dependency>
             <groupId>br.com.fiap.techchallenge</groupId>
             <artifactId>common</artifactId>
         </dependency>
+
+        <!-- AWS Lambda -->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-lambda-java-core</artifactId>
         </dependency>
+
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-lambda-java-events</artifactId>
         </dependency>
+
+        <!-- Amazon SES -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>ses</artifactId>
         </dependency>
+
+        <!-- Amazon SNS -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sns</artifactId>
         </dependency>
+
+        <!-- Logs -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
         </dependency>
+
+        <!-- Testes automatizados com JUnit 5 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.12.2</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
         <plugins>
+
+            <!-- Geracao do JAR para AWS Lambda -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
             </plugin>
+
         </plugins>
     </build>
+
 </project>
