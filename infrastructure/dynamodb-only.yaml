@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Somente a tabela DynamoDB de avaliações (útil para validar banco antes do stack completo).
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, hml, prod]
+
+Resources:
+  AvaliacoesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${EnvironmentName}-avaliacoes'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: entityType
+          AttributeType: S
+        - AttributeName: dataEnvio
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: periodo-index
+          KeySchema:
+            - AttributeName: entityType
+              KeyType: HASH
+            - AttributeName: dataEnvio
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: fiap-tech-challenge-fase-4
+        - Key: DataClassification
+          Value: customer-feedback
+
+Outputs:
+  AvaliacoesTableName:
+    Description: Nome da tabela de avaliações
+    Value: !Ref AvaliacoesTable
+  AvaliacoesTableArn:
+    Description: ARN da tabela
+    Value: !GetAtt AvaliacoesTable.Arn
+  PeriodoIndexName:
+    Description: Nome do GSI para consultas por período
+    Value: periodo-index

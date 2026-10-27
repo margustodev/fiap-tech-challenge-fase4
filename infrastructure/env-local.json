@@ -1,0 +1,33 @@
+{
+  "Parameters": {
+    "EnvironmentName": "dev",
+    "AdminEmail": "admin@example.com",
+    "SenderEmail": "noreply@example.com",
+    "DynamoDbEndpoint": "http://host.docker.internal:8000"
+  },
+  "FeedbackReceiverFunction": {
+    "DYNAMODB_ENDPOINT": "http://host.docker.internal:8000",
+    "AVALIACOES_TABLE_NAME": "dev-avaliacoes",
+    "AWS_REGION": "us-east-1",
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "AWS_ACCESS_KEY_ID": "local",
+    "AWS_SECRET_ACCESS_KEY": "local",
+    "ENVIRONMENT": "dev",
+    "ADMIN_EMAIL": "admin@example.com",
+    "SENDER_EMAIL": "noreply@example.com"
+  },
+  "CriticalNotifierFunction": {
+    "AWS_REGION": "us-east-1",
+    "ADMIN_EMAIL": "admin@example.com",
+    "SENDER_EMAIL": "noreply@example.com"
+  },
+  "WeeklyReporterFunction": {
+    "DYNAMODB_ENDPOINT": "http://host.docker.internal:8000",
+    "AVALIACOES_TABLE_NAME": "dev-avaliacoes",
+    "AWS_REGION": "us-east-1",
+    "AWS_ACCESS_KEY_ID": "local",
+    "AWS_SECRET_ACCESS_KEY": "local",
+    "ADMIN_EMAIL": "admin@example.com",
+    "SENDER_EMAIL": "noreply@example.com"
+  }
+}

@@ -60,17 +60,78 @@ Sistema serverless de feedbacks de cursos on-line: recebimento de avaliações, 
 ```
 fiap-tech-challenge-fase-4/
 ├── pom.xml                          # Parent Maven
-├── common/                          # Domínio, DTOs, portas, use cases
+├── common/                          # Domínio, DTOs, portas, persistência DynamoDB
 ├── feedback-receiver/               # Lambda de recebimento
 ├── critical-notifier/               # Lambda de notificação crítica
 ├── weekly-reporter/                 # Lambda de relatório semanal
 ├── events/                          # Payloads de exemplo para sam local invoke
+├── scripts/validate-dynamodb-local.ps1
 └── infrastructure/
-    ├── template.yaml                # AWS SAM (recursos cloud)
+    ├── template.yaml                # Stack completo (SAM)
+    ├── dynamodb-only.yaml           # Somente tabela DynamoDB
     └── samconfig.toml
 ```
 
 Pacote base: `br.com.fiap.techchallenge.fase4`
+
+## Banco de dados (DynamoDB)
+
+### Modelagem
+
+| Campo | Tipo | Uso |
+|-------|------|-----|
+| `id` | S (PK) | Identificador da avaliação |
+| `descricao` | S | Texto do feedback |
+| `nota` | N | 0–10 |
+| `urgencia` | S | `BAIXA` / `MEDIA` / `ALTA` / `CRITICA` |
+| `dataEnvio` | S (ISO-8601) | Timestamp; SK do GSI |
+| `entityType` | S | Sempre `AVALIACAO`; PK do GSI |
+
+**GSI `periodo-index`:** PK `entityType` + SK `dataEnvio` — permite `Query` por intervalo (relatório semanal), sem Scan.
+
+**Streams:** `NEW_IMAGE` para o `critical-notifier`.
+
+**Segurança:** SSE (criptografia em repouso) + Point-in-Time Recovery.
+
+### Regras de acesso (IAM)
+
+| Função | Permissões DynamoDB |
+|--------|---------------------|
+| `feedback-receiver` | `PutItem`, `GetItem`, `DescribeTable` (somente tabela) |
+| `weekly-reporter` | `GetItem`, `Query`, `DescribeTable` (tabela + `index/*`) |
+| `critical-notifier` | apenas Stream (`DescribeStream`, `GetRecords`, …) — sem leitura/escrita na tabela |
+
+### Criar na cloud
+
+Com credenciais AWS (`aws configure`):
+
+```bash
+# Somente a tabela
+aws cloudformation deploy \
+  --template-file infrastructure/dynamodb-only.yaml \
+  --stack-name fiap-fase4-dynamodb \
+  --parameter-overrides EnvironmentName=dev
+
+# Ou stack completo (API + Lambdas + tabela)
+cd infrastructure
+sam deploy --guided
+```
+
+### Validar persistência e recuperação
+
+**Opção A — DynamoDB Local (sem conta AWS):**
+
+```powershell
+.\scripts\validate-dynamodb-local.ps1
+```
+
+**Opção B — testes unitários (mapper + put/get):**
+
+```bash
+mvn -pl common -am test "-Dtest=AvaliacaoEntityMapperTest,DynamoDbAvaliacaoRepositoryTest"
+```
+
+Classes principais: `AvaliacaoEntity`, `DynamoDbAvaliacaoRepository`, `AvaliacoesTableInitializer`, `AvaliacoesTableSchema`.
 
 ## Contrato da API
 
@@ -83,8 +144,17 @@ Pacote base: `br.com.fiap.techchallenge.fase4`
 }
 ```
 
-- `nota`: inteiro de **0 a 10**
-- A urgência é calculada a partir da nota (serviço de domínio `CalcularUrgenciaService`)
+- `descricao`: obrigatória (não vazia)
+- `nota`: inteiro obrigatório de **0 a 10**
+- Respostas: **201** sucesso | **400** validação | **500** erro interno
+- A urgência é calculada e persistida com a avaliação:
+
+| Nota | Urgência |
+|------|----------|
+| 0–2 | CRITICA |
+| 3–4 | ALTA |
+| 5–7 | MEDIA |
+| 8–10 | BAIXA |
 
 ### E-mail de aviso de urgência
 
@@ -153,22 +223,45 @@ Configurado em `infrastructure/template.yaml`:
 mvn clean package
 ```
 
-### 2. Subir a API local (API Gateway + Lambda)
+### 2. Subir a API local (API Gateway + Lambda + DynamoDB Local)
 
-```bash
-cd infrastructure
-sam local start-api --port 3000
+**Importante:** variáveis `$env:...` no PowerShell **não entram** no container da Lambda.
+Sem `DYNAMODB_ENDPOINT`, a função tenta a AWS real, fica pendurada e estoura **timeout 30s / 502**.
+
+Forma recomendada (um comando):
+
+```powershell
+.\scripts\start-api-local.ps1
 ```
+
+Ou manualmente:
+
+```powershell
+# Terminal A — DynamoDB Local (com -sharedDb)
+docker start fiap-dynamodb-local
+# se não existir:
+# docker run -d --name fiap-dynamodb-local -p 8000:8000 amazon/dynamodb-local -jar DynamoDBLocal.jar -sharedDb -inMemory
+
+# criar/validar tabela
+$env:DYNAMODB_ENDPOINT="http://localhost:8000"
+$env:AVALIACOES_TABLE_NAME="dev-avaliacoes"
+$env:AWS_REGION="us-east-1"
+$env:RUN_DYNAMODB_IT="true"
+mvn -pl common -am test "-Dtest=DynamoDbAvaliacaoRepositoryIT"
+
+# Terminal B — API (obrigatório: parameter-overrides do endpoint)
+cd C:\Project\fiap-tech-challenge-fase4
+mvn clean package -DskipTests
+cd infrastructure
+sam local start-api --port 3000 --env-vars env-local.json `
+  --parameter-overrides "DynamoDbEndpoint=http://host.docker.internal:8000"
+```
+
+> Sem `DynamoDbEndpoint`, a Lambda tenta a AWS real e retorna 500/502.
+> Se a API ficar estranha após erros, limpe containers travados:
+> `docker ps -q --filter ancestor=public.ecr.aws/lambda/java:25-rapid-x86_64 | % { docker rm -f $_ }`
 
 Em outro terminal, envie uma avaliação:
-
-```bash
-curl -X POST http://127.0.0.1:3000/avaliacao ^
-  -H "Content-Type: application/json" ^
-  -d "{\"descricao\":\"Curso com material desatualizado\",\"nota\":2}"
-```
-
-No PowerShell:
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/avaliacao `
