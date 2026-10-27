@@ -10,17 +10,18 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Testes unitarios do servico de notificacoes via SES.
+ * Testes unitarios do servico de notificacoes.
  */
 class SesNotificacaoServiceTest {
 
     @Test
     void deveMontarEmailComDadosDaAvaliacaoCritica() {
 
-        // 1. Cria os dados da notificacao
+        // Cria os dados da notificacao
         NotificacaoUrgenciaDto notificacao =
                 new NotificacaoUrgenciaDto(
                         "Curso com conteudo desatualizado",
@@ -28,48 +29,82 @@ class SesNotificacaoServiceTest {
                         Instant.parse("2026-10-19T18:00:00Z")
                 );
 
-        // 2. Cria um servico de e-mail simulado
+        // Simula o servico de e-mail
         EmailSimulado emailSimulado = new EmailSimulado();
 
-        // 3. Cria o servico de notificacao
         SesNotificacaoService servico =
                 new SesNotificacaoService(
                         emailSimulado,
                         "admin@exemplo.com"
                 );
 
-        // 4. Executa a notificacao
+        // Executa a notificacao
         servico.notificarUrgencia(notificacao);
 
-        // 5. Verifica o destinatario
+        // Confere o destinatario
         assertEquals(
                 "admin@exemplo.com",
                 emailSimulado.destinatario
         );
 
-        // 6. Verifica o assunto
+        // Confere o assunto
         assertEquals(
                 "Alerta de avaliacao - Urgencia CRITICA",
                 emailSimulado.assunto
         );
 
-        // 7. Verifica a descricao no corpo do e-mail
+        // Confere o corpo do e-mail
         assertTrue(
                 emailSimulado.corpo.contains(
                         "Curso com conteudo desatualizado"
                 )
         );
 
-        // 8. Verifica a urgencia
         assertTrue(
                 emailSimulado.corpo.contains("CRITICA")
         );
 
-        // 9. Verifica a data de envio
         assertTrue(
                 emailSimulado.corpo.contains(
                         "2026-10-19T18:00:00Z"
                 )
+        );
+    }
+
+    @Test
+    void devePropagarErroQuandoEnvioDoEmailFalhar() {
+
+        // Cria uma notificacao critica
+        NotificacaoUrgenciaDto notificacao =
+                new NotificacaoUrgenciaDto(
+                        "Problema grave no curso",
+                        Urgencia.CRITICA,
+                        Instant.parse("2026-10-19T18:00:00Z")
+                );
+
+        // Simula uma falha no servico de e-mail
+        EmailService emailComFalha =
+                (destinatario, assunto, corpo) -> {
+                    throw new IllegalStateException(
+                            "Falha simulada no envio."
+                    );
+                };
+
+        SesNotificacaoService servico =
+                new SesNotificacaoService(
+                        emailComFalha,
+                        "admin@exemplo.com"
+                );
+
+        // Verifica se a falha e propagada
+        IllegalStateException erro = assertThrows(
+                IllegalStateException.class,
+                () -> servico.notificarUrgencia(notificacao)
+        );
+
+        assertEquals(
+                "Falha simulada no envio.",
+                erro.getMessage()
         );
     }
 

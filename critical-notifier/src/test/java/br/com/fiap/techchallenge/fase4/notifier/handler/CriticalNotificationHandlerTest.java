@@ -20,6 +20,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+/**
+ * Testes unitarios da Lambda de notificacoes.
+ */
 class CriticalNotificationHandlerTest {
 
     @Test
@@ -42,8 +45,16 @@ class CriticalNotificationHandlerTest {
 
         NotificacaoUrgenciaDto notificacao = notificacoes.get(0);
 
-        assertEquals("Curso desatualizado", notificacao.getDescricao());
-        assertEquals(Urgencia.CRITICA, notificacao.getUrgencia());
+        assertEquals(
+                "Curso desatualizado",
+                notificacao.getDescricao()
+        );
+
+        assertEquals(
+                Urgencia.CRITICA,
+                notificacao.getUrgencia()
+        );
+
         assertEquals(
                 Instant.parse("2026-10-19T18:00:00Z"),
                 notificacao.getDataEnvio()
@@ -86,6 +97,7 @@ class CriticalNotificationHandlerTest {
         handler.handleRequest(evento, null);
 
         assertEquals(1, notificacoes.size());
+
         assertEquals(
                 Urgencia.ALTA,
                 notificacoes.get(0).getUrgencia()
@@ -114,7 +126,6 @@ class CriticalNotificationHandlerTest {
     @Test
     void deveRejeitarEventoSemDadosDaAvaliacao() {
 
-        // Simula um evento INSERT sem NewImage
         StreamRecord streamRecord = new StreamRecord();
 
         DynamodbEvent.DynamodbStreamRecord record =
@@ -135,7 +146,6 @@ class CriticalNotificationHandlerTest {
                         servicoSimulado
                 );
 
-        // Verifica se o evento invalido e rejeitado
         IllegalArgumentException erro = assertThrows(
                 IllegalArgumentException.class,
                 () -> handler.handleRequest(evento, null)
@@ -146,8 +156,96 @@ class CriticalNotificationHandlerTest {
                 erro.getMessage()
         );
 
-        // Nenhuma notificacao deve ser acionada
         assertEquals(0, notificacoes.size());
+    }
+
+    @Test
+    void naoDeveNotificarQuandoUrgenciaForMedia() {
+
+        DynamodbEvent evento = criarEvento("MEDIA", "INSERT");
+
+        List<NotificacaoUrgenciaDto> notificacoes = new ArrayList<>();
+        NotificacaoService servicoSimulado = notificacoes::add;
+
+        CriticalNotificationHandler handler =
+                new CriticalNotificationHandler(
+                        new DynamoDbStreamMapper(),
+                        servicoSimulado
+                );
+
+        handler.handleRequest(evento, null);
+
+        assertEquals(0, notificacoes.size());
+    }
+
+    @Test
+    void naoDeveNotificarQuandoEventoForRemove() {
+
+        DynamodbEvent evento = criarEvento("CRITICA", "REMOVE");
+
+        List<NotificacaoUrgenciaDto> notificacoes = new ArrayList<>();
+        NotificacaoService servicoSimulado = notificacoes::add;
+
+        CriticalNotificationHandler handler =
+                new CriticalNotificationHandler(
+                        new DynamoDbStreamMapper(),
+                        servicoSimulado
+                );
+
+        handler.handleRequest(evento, null);
+
+        assertEquals(0, notificacoes.size());
+    }
+
+    @Test
+    void deveProcessarMultiplosRegistrosCorretamente() {
+
+        // Cria quatro registros diferentes
+        DynamodbEvent.DynamodbStreamRecord registroBaixo =
+                criarEvento("BAIXA", "INSERT").getRecords().get(0);
+
+        DynamodbEvent.DynamodbStreamRecord registroAlto =
+                criarEvento("ALTA", "INSERT").getRecords().get(0);
+
+        DynamodbEvent.DynamodbStreamRecord registroCritico =
+                criarEvento("CRITICA", "INSERT").getRecords().get(0);
+
+        DynamodbEvent.DynamodbStreamRecord registroModify =
+                criarEvento("CRITICA", "MODIFY").getRecords().get(0);
+
+        // Simula um lote recebido pela Lambda
+        DynamodbEvent evento = new DynamodbEvent();
+
+        evento.setRecords(List.of(
+                registroBaixo,
+                registroAlto,
+                registroCritico,
+                registroModify
+        ));
+
+        List<NotificacaoUrgenciaDto> notificacoes = new ArrayList<>();
+        NotificacaoService servicoSimulado = notificacoes::add;
+
+        CriticalNotificationHandler handler =
+                new CriticalNotificationHandler(
+                        new DynamoDbStreamMapper(),
+                        servicoSimulado
+                );
+
+        handler.handleRequest(evento, null);
+
+        // Apenas ALTA e CRITICA devem gerar notificacao
+        assertEquals(2, notificacoes.size());
+
+        assertEquals(
+                Urgencia.ALTA,
+                notificacoes.get(0).getUrgencia()
+        );
+
+        assertEquals(
+                Urgencia.CRITICA,
+                notificacoes.get(1).getUrgencia()
+        );
     }
 
     /**
