@@ -14,25 +14,34 @@ Parameters:
 
   AdminEmail:
     Type: String
+    Default: admin@example.com
     Description: E-mail dos administradores para notificações e relatório semanal
 
   SenderEmail:
     Type: String
+    Default: noreply@example.com
     Description: E-mail remetente verificado no Amazon SES
+
+  # Vazio na AWS. Local: http://host.docker.internal:8000
+  DynamoDbEndpoint:
+    Type: String
+    Default: ''
+    Description: Endpoint DynamoDB (deixe vazio na cloud; use DynamoDB Local no SAM)
 
 Globals:
   Function:
     Runtime: java25
-    Timeout: 30
+    Timeout: 90
     MemorySize: 512
     Architectures:
       - x86_64
     Environment:
       Variables:
         ENVIRONMENT: !Ref EnvironmentName
-        AVALIACOES_TABLE_NAME: !Ref AvaliacoesTable
+        AVALIACOES_TABLE_NAME: !Sub '${EnvironmentName}-avaliacoes'
         ADMIN_EMAIL: !Ref AdminEmail
         SENDER_EMAIL: !Ref SenderEmail
+        DYNAMODB_ENDPOINT: !Ref DynamoDbEndpoint
         POWERTOOLS_SERVICE_NAME: feedback-cursos
 
 Resources:
@@ -63,7 +72,9 @@ Resources:
                 Action:
                   - dynamodb:PutItem
                   - dynamodb:GetItem
+                  - dynamodb:DescribeTable
                 Resource: !GetAtt AvaliacoesTable.Arn
+              # Sem acesso a Scan/Query/Delete — receiver só grava e lê por id (least privilege)
 
   CriticalNotifierRole:
     Type: AWS::IAM::Role
@@ -120,10 +131,12 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - dynamodb:Query
-                  - dynamodb:Scan
                   - dynamodb:GetItem
-                Resource: !GetAtt AvaliacoesTable.Arn
+                  - dynamodb:Query
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !GetAtt AvaliacoesTable.Arn
+                  - !Sub '${AvaliacoesTable.Arn}/index/*'
               - Effect: Allow
                 Action:
                   - ses:SendEmail
@@ -134,6 +147,11 @@ Resources:
   # Banco de dados (DynamoDB) com criptografia e streams
   #############################################################################
 
+  # Modelo:
+  #   PK id (S)
+  #   GSI periodo-index: PK entityType (S) + SK dataEnvio (S ISO-8601) — Query por intervalo
+  #   Streams NEW_IMAGE → critical-notifier
+  #   SSE + PITR — segurança dos dados de feedback
   AvaliacoesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -142,16 +160,20 @@ Resources:
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
+        - AttributeName: entityType
+          AttributeType: S
         - AttributeName: dataEnvio
           AttributeType: S
       KeySchema:
         - AttributeName: id
           KeyType: HASH
       GlobalSecondaryIndexes:
-        - IndexName: dataEnvio-index
+        - IndexName: periodo-index
           KeySchema:
-            - AttributeName: dataEnvio
+            - AttributeName: entityType
               KeyType: HASH
+            - AttributeName: dataEnvio
+              KeyType: RANGE
           Projection:
             ProjectionType: ALL
       StreamSpecification:
@@ -165,6 +187,8 @@ Resources:
           Value: fiap-tech-challenge-fase-4
         - Key: DataClassification
           Value: customer-feedback
+        - Key: AccessModel
+          Value: least-privilege-per-lambda
 
   #############################################################################
   # Notificações (SNS)

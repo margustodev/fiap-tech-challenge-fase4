@@ -14,4 +14,37 @@ public class AvaliacaoResumoDto {
     private Urgencia urgencia;
     private Instant dataEnvio;
 
+    public AvaliacaoResumoDto() {
+    }
+
+    public AvaliacaoResumoDto(String descricao, Urgencia urgencia, Instant dataEnvio) {
+        this.descricao = descricao;
+        this.urgencia = urgencia;
+        this.dataEnvio = dataEnvio;
+    }
+
+    public String getDescricao() {
+        return descricao;
+    }
+
+    public void setDescricao(String descricao) {
+        this.descricao = descricao;
+    }
+
+    public Urgencia getUrgencia() {
+        return urgencia;
+    }
+
+    public void setUrgencia(Urgencia urgencia) {
+        this.urgencia = urgencia;
+    }
+
+    public Instant getDataEnvio() {
+        return dataEnvio;
+    }
+
+    public void setDataEnvio(Instant dataEnvio) {
+        this.dataEnvio = dataEnvio;
+    }
+
 }
