@@ -11,7 +11,14 @@ public class CalcularMediaAvaliacoesService {
 
     public Double calcular(List<Avaliacao> avaliacoes) {
         // TODO: implementar cálculo da média das notas
-        return null;
+        if (avaliacoes == null || avaliacoes.isEmpty()) {
+            return 0.0;
+        }
+
+        return avaliacoes.stream()
+                .mapToInt(Avaliacao::getNota)
+                .average()
+                .orElse(0.0);
     }
 
 }

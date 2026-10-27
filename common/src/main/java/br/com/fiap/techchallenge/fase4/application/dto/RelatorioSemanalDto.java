@@ -19,4 +19,13 @@ public class RelatorioSemanalDto {
     private List<EstatisticaPorDia> quantidadePorDia;
     private List<EstatisticaPorUrgencia> quantidadePorUrgencia;
 
+    public RelatorioSemanalDto(LocalDate dataInicio, LocalDate dataFim, Double mediaAvaliacoes, Integer totalAvaliacoes, List<AvaliacaoResumoDto> avaliacoes, List<EstatisticaPorDia> quantidadePorDia, List<EstatisticaPorUrgencia> quantidadePorUrgencia) {
+        this.dataInicio = dataInicio;
+        this.dataFim = dataFim;
+        this.mediaAvaliacoes = mediaAvaliacoes;
+        this.totalAvaliacoes = totalAvaliacoes;
+        this.avaliacoes = avaliacoes;
+        this.quantidadePorDia = quantidadePorDia;
+        this.quantidadePorUrgencia = quantidadePorUrgencia;
+    }
 }

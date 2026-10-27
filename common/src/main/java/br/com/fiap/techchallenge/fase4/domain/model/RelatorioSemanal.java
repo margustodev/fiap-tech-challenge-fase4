@@ -16,4 +16,34 @@ public class RelatorioSemanal {
     private List<EstatisticaPorDia> quantidadePorDia;
     private List<EstatisticaPorUrgencia> quantidadePorUrgencia;
 
+    // Getters
+    public LocalDate getDataInicio() {
+        return dataInicio;
+    }
+
+    public LocalDate getDataFim() {
+        return dataFim;
+    }
+
+    public Double getMediaAvaliacoes() {
+        return mediaAvaliacoes;
+    }
+
+    public Integer getTotalAvaliacoes() {
+        return totalAvaliacoes;
+    }
+
+    public List<Avaliacao> getAvaliacoes() {
+        return avaliacoes;
+    }
+
+    public List<EstatisticaPorDia> getQuantidadePorDia() {
+        return quantidadePorDia;
+    }
+
+    public List<EstatisticaPorUrgencia> getQuantidadePorUrgencia() {
+        return quantidadePorUrgencia;
+    }
+
+
 }

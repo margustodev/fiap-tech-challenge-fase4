@@ -14,4 +14,9 @@ public class AvaliacaoResumoDto {
     private Urgencia urgencia;
     private Instant dataEnvio;
 
+    public AvaliacaoResumoDto(String descricao, Urgencia urgencia, Instant dataEnvio) {
+        this.descricao = descricao;
+        this.urgencia = urgencia;
+        this.dataEnvio = dataEnvio;
+    }
 }
