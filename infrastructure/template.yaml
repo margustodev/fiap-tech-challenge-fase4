@@ -1,4 +1,3 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
@@ -208,6 +207,8 @@ Resources:
 
   FeedbackReceiverFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      SkipBuild: True
     Properties:
       FunctionName: !Sub '${EnvironmentName}-feedback-receiver'
       CodeUri: ../feedback-receiver/target/feedback-receiver-1.0.0-SNAPSHOT.jar
@@ -250,6 +251,8 @@ Resources:
 
   WeeklyReporterFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      SkipBuild: True
     Properties:
       FunctionName: !Sub '${EnvironmentName}-weekly-reporter'
       CodeUri: ../weekly-reporter/target/weekly-reporter-1.0.0-SNAPSHOT.jar
