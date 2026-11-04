@@ -104,4 +104,3 @@ O SAM aponta para JARs em `target/` e declara `SkipBuild: True`; compile com Mav
 
 Repositório: [margustodev/fiap-tech-challenge-fase4](https://github.com/margustodev/fiap-tech-challenge-fase4).
 
-Não versione credenciais AWS, arquivos pessoais ou resultados de build.
