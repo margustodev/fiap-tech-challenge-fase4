@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: FIAP Fase 4 - API de Avaliações
+  version: 1.0.0
+  description: >-
+    Contrato de referência do POST /avaliacao. Não é importado pelo SAM.
+    O handler usa Integer com coerções Jackson padrão; a restrição estrita de
+    tipos ainda precisa ser implementada. A URL AWS depende de deploy validado.
+servers:
+  - url: http://127.0.0.1:3000
+    description: API local via AWS SAM
+security: []
+tags:
+  - name: Avaliações
+paths:
+  /avaliacao:
+    post:
+      tags: [Avaliações]
+      operationId: receberAvaliacao
+      summary: Receber e persistir uma avaliação
+      description: >-
+        Gera UUID, calcula urgência e persiste no DynamoDB.
+        O envio de alerta é assíncrono e não é confirmado pelo HTTP 201.
+        Não há autenticação configurada no template atual.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvaliacaoRequest'
+            example:
+              descricao: Curso com material desatualizado
+              nota: 2
+      responses:
+        '201':
+          description: Avaliação persistida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvaliacaoResponse'
+              example:
+                id: a3e2d628-471d-4f59-8cf9-fd7b42a01d25
+                descricao: Curso com material desatualizado
+                nota: 2
+                urgencia: CRITICA
+                dataEnvio: '2026-11-03T15:00:00Z'
+        '400':
+          description: JSON inválido ou falha de validação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroResponse'
+              example:
+                mensagem: "O campo 'nota' deve estar entre 0 e 10."
+        '500':
+          description: >-
+            Falha interna capturada pelo handler. Atualmente o corpo concatena
+            a mensagem da exceção, comportamento pendente de revisão.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroResponse'
+              example:
+                mensagem: 'Erro interno ao processar a avaliação: detalhe da falha'
+components:
+  schemas:
+    AvaliacaoRequest:
+      type: object
+      required: [descricao, nota]
+      additionalProperties: true
+      properties:
+        descricao:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Descrição obrigatória, contendo algum caractere não branco.
+        nota:
+          type: integer
+          minimum: 0
+          maximum: 10
+          description: Nota inteira no contrato; coerções de tipo ainda não são restringidas no mapper.
+    AvaliacaoResponse:
+      type: object
+      required: [id, descricao, nota, urgencia, dataEnvio]
+      properties:
+        id:
+          type: string
+          format: uuid
+        descricao:
+          type: string
+        nota:
+          type: integer
+          minimum: 0
+          maximum: 10
+        urgencia:
+          type: string
+          enum: [CRITICA, ALTA, MEDIA, BAIXA]
+          description: 0–2 CRITICA; 3–4 ALTA; 5–7 MEDIA; 8–10 BAIXA.
+        dataEnvio:
+          type: string
+          format: date-time
+    ErroResponse:
+      type: object
+      required: [mensagem]
+      properties:
+        mensagem:
+          type: string
