@@ -2,7 +2,7 @@
 
 [Voltar ao README](../README.md)
 
-Os handlers abaixo estão implementados no código-fonte. A presença de testes não comprova sua execução; consulte a [validação da entrega](entrega.md). Os nomes físicos recebem prefixo de ambiente (`dev`, `hml` ou `prod`).
+Os handlers abaixo estão implementados no código-fonte. Os nomes físicos recebem prefixo de ambiente (`dev`, `hml` ou `prod`).
 
 ## Resumo operacional declarado no SAM
 
@@ -90,7 +90,3 @@ O e-mail contém descrição, urgência e data de cada avaliação. Sem avaliaç
 **Limitação de aplicação:** `RelatorioAggregator` e `DateTimeUtils` ainda possuem TODOs, mas o caminho atual calcula período e agregações no caso de uso e nos serviços de domínio implementados.
 
 **Testes existentes:** `WeeklyReportHandlerTest`, `GerarRelatorioSemanalUseCaseTest`, `RelatorioMapperTest`, testes de média/agrupamentos e `SesRelatorioServiceTest`.
-
-## Dependências para comprovação na AWS
-
-O teste integrado das três funções depende de stack implantada, IAM funcional, identidade SES verificada, tabela/índice/stream disponíveis e regra EventBridge ativa. Testes locais de uma função não substituem essa comprovação. Veja [deploy](deploy.md) e [pendências](entrega.md).

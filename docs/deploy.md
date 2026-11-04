@@ -2,8 +2,6 @@
 
 [Voltar ao README](../README.md)
 
-> **Procedimento proposto, ainda não validado nesta revisão.** Ter templates e comandos não comprova stack implantada, ambiente disponível ou pipeline operacional. Não foi feito deploy nem alterada uma conta AWS nesta revisão documental.
-
 ## O que já está versionado
 
 | Arquivo | Finalidade |
@@ -13,24 +11,11 @@
 | `infrastructure/samconfig.toml` | Defaults de SAM para dev e e-mails fictícios |
 | `infrastructure/env-local.json` | Valores de desenvolvimento para SAM local |
 
-A tarefa de IaC está **parcialmente atendida pela existência dos templates**, com revisão e validação operacional pendentes. Não há workflow em `.github/workflows/` nesta base. Os valores `dev`, `hml`, `prod` são aceitos pelo parâmetro; isso não significa que os três ambientes existam.
-
 ## Pré-requisitos de conta e decisões
 
 Antes do primeiro deploy, definir conta, região, ambiente, permissões do executor e e-mails de remetente/administrador. Verificar as identidades SES na região escolhida e as restrições da conta (incluindo destinatário no sandbox). A assinatura de e-mail do SNS exige confirmação pelo destinatário.
 
 O template declara recursos com nomes fixos por ambiente (roles, funções, tabela e tópico). Use stacks/ambientes sem colisão. Não implante `dynamodb-only.yaml` e a stack completa com o mesmo `EnvironmentName` esperando que compartilhem a tabela automaticamente: ambas tentam gerenciá-la. Planeje propriedade/importação antes de reutilizar uma tabela existente.
-
-## Revisões necessárias no template
-
-Estas são verificações para o responsável por DevOps, não correções já executadas:
-
-- Validar compatibilidade de SAM/runtime `java25` na região e nas ferramentas usadas.
-- Confirmar roles e permissões efetivas. O receiver declara `Role` explícita e também `Policies`; revisar como o SAM trata essa combinação antes de assumir permissões adicionais. Hoje as métricas customizadas da aplicação são apenas logs.
-- Validar a configuração de logs do API Gateway e a role de logging em nível de conta/região, que não é declarada pelo template.
-- Revisar escopo SES, política de acesso da API, retenção de logs/dados, proteção de tabela e comportamento de rollback.
-- Definir retry, tratamento de registros problemáticos, destino de falha/DLQ e estratégia de deduplicação para as funções assíncronas.
-- Conferir alarmes: `AWS/Lambda Errors` não substitui monitoramento de HTTP `5xx` retornados normalmente pelo handler.
 
 ## Configuração por ambiente
 
@@ -98,21 +83,3 @@ aws cloudformation describe-stacks \
 6. Confirmar assinatura SNS e alarmes/dashboard. O tópico de alarmes não comprova uso do adaptador SNS de negócio.
 7. Conferir regra semanal habilitada e executar teste controlado do reporter. O relatório seleciona a semana anterior; dados enviados no mesmo dia podem não entrar nele.
 8. Registrar logs e evidências de relatório, alerta e respostas inválidas, sem publicar credenciais ou dados pessoais.
-
-Nenhuma dessas verificações de cloud foi realizada nesta revisão.
-
-## CI/CD e deploy automatizado — pendentes
-
-O trabalho de DevOps precisa entregar um pipeline versionado e demonstrar sua execução. Uma sequência sugerida é:
-
-| Etapa | Evidência esperada |
-|---|---|
-| Checkout e ferramentas | Commit identificado, JDK 25, Maven e SAM compatíveis |
-| Verificação | Testes descobertos/executados, JARs gerados e `sam validate --lint` aprovado |
-| Autenticação AWS | Role do pipeline e vínculo de confiança definidos, preferencialmente com credenciais temporárias |
-| Configuração | Parâmetros separados por ambiente e acesso controlado aos valores necessários |
-| Deploy | Publicação dos três JARs e atualização da stack por SAM |
-| Pós-deploy | Smoke test HTTP, persistência, SES, Streams e relatório comprovados |
-| Promoção/recuperação | Política de aprovação, rollback e preservação de dados documentada |
-
-Nenhum workflow, role de pipeline ou ambiente foi criado por esta alteração de documentação. Escrever o YAML de CI/IaC pode ser feito antes de possuir cloud, mas validar autenticação, provisionamento e deploy exige a infraestrutura e os acessos definidos.

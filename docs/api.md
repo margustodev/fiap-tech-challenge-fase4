@@ -7,7 +7,7 @@
 | Ambiente | Endereço |
 |---|---|
 | Local com SAM | `http://127.0.0.1:3000/avaliacao` |
-| AWS | Obter o Output `ApiEndpoint` da stack após deploy; nenhuma URL real foi validada nesta revisão |
+| AWS | Obter o Output `ApiEndpoint` da stack após deploy |
 
 Somente `POST /avaliacao` está declarado no template. As funções de alerta e relatório são acionadas por eventos, sem endpoints REST. Não há GET de avaliações, health check ou frontend neste código.
 
@@ -94,7 +94,7 @@ curl -i -X POST http://127.0.0.1:3000/avaliacao \
   -d '{"descricao":"Excelente conteúdo","nota":9}'
 ```
 
-| Caso para revisão | Resultado esperado no handler |
+| Caso de teste | Resultado esperado no handler |
 |---|---|
 | Descrição válida, nota 2 | `201`, urgência `CRITICA` |
 | Descrição válida, nota 4 | `201`, urgência `ALTA` |

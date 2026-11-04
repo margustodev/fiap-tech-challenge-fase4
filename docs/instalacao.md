@@ -1,4 +1,4 @@
-# Instalação, IntelliJ e execução local
+# Instalação e execução local
 
 [Voltar ao README](../README.md)
 
@@ -16,16 +16,7 @@
 
 Verifique `java -version`, `mvn -version`, `docker info` e `sam --version`. O Maven deve indicar JDK 25. A compatibilidade da versão instalada do SAM e da imagem de runtime deve ser validada antes de executar.
 
-## Abrir no IntelliJ
-
-1. Clone o repositório ou abra a cópia já existente, preservando alterações locais.
-2. Abra o `pom.xml` da raiz como projeto Maven.
-3. Em **Project Structure**, selecione JDK 25 e nível de linguagem correspondente.
-4. Em **Settings > Build, Execution, Deployment > Build Tools > Maven > Runner**, selecione JDK 25. Confira também a JDK usada pelo importador Maven, conforme a versão da IDE.
-5. Recarregue os projetos Maven: `common`, `feedback-receiver`, `critical-notifier` e `weekly-reporter`.
-6. Abra `README.md` e os arquivos de `docs/` com preview Markdown. Use o painel Git/Commit para conferir o diff.
-
-Os handlers rodam no runtime Lambda; não há aplicação web com método `main` para executar pelo botão Run.
+O projeto é composto por handlers Lambda, executados pelo runtime AWS ou pelo SAM local.
 
 ## Build e testes sem cloud
 
@@ -138,7 +129,7 @@ O SAM local não conecta automaticamente Streams/EventBridge às funções. `nul
 
 | Sintoma | Conferir |
 |---|---|
-| `release version 25 not supported` | JDK do terminal, SDK e Maven Runner |
+| `release version 25 not supported` | JDK do terminal e do Maven |
 | JAR ausente no SAM | Rodar `mvn clean package` na raiz e conferir os três artefatos |
 | Timeout, `500` ou `502` local | Endpoint no container, parâmetros SAM, Docker e tabela |
 | Tabela não encontrada | `AVALIACOES_TABLE_NAME`, teste IT e `-sharedDb` |

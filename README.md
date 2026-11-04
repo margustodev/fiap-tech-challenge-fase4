@@ -2,8 +2,6 @@
 
 Sistema serverless de avaliações de cursos on-line desenvolvido para a pós-graduação em Arquitetura e Desenvolvimento em Java da FIAP. Recebe avaliações, calcula urgência, persiste no DynamoDB, envia alertas por e-mail e gera relatório semanal.
 
-> **Estado da entrega:** os três handlers possuem implementação. A infraestrutura SAM está versionada, mas o provisionamento e a operação na AWS não foram validados nesta revisão. CI/CD e deploy automatizado continuam pendentes. Consulte o [checklist de entrega e pendências](docs/entrega.md).
-
 ## Documentação
 
 | Documento | Conteúdo |
@@ -12,9 +10,8 @@ Sistema serverless de avaliações de cursos on-line desenvolvido para a pós-gr
 | [Funções serverless](docs/funcoes-serverless.md) | Responsabilidade, entrada, saída, dependências e falhas de cada Lambda |
 | [API](docs/api.md) | Endpoint, exemplos, respostas e limitações atuais |
 | [OpenAPI 3.0](docs/openapi.yaml) | Contrato de referência para Swagger Editor e clientes HTTP |
-| [Instalação e execução local](docs/instalacao.md) | IntelliJ, Maven, Docker, SAM e testes |
-| [Deploy e configuração](docs/deploy.md) | Procedimento manual proposto e dependências de DevOps |
-| [Checklist de entrega](docs/entrega.md) | Evidências disponíveis, bloqueios de cloud e pendências de código |
+| [Instalação e execução local](docs/instalacao.md) | Maven, Docker, SAM e testes |
+| [Deploy e configuração](docs/deploy.md) | Procedimento manual e parâmetros de implantação |
 
 ## Tecnologias e organização
 
@@ -43,7 +40,7 @@ cd fiap-tech-challenge-fase4
 mvn clean package
 ```
 
-No IntelliJ: abra o `pom.xml` da raiz como projeto Maven, selecione **JDK 25** para Project SDK e Maven Runner e recarregue os módulos. O projeto é composto por handlers Lambda; a API local é iniciada pelo SAM, sem classe `main` de servidor web.
+O projeto é composto por handlers Lambda; a API local é iniciada pelo SAM, sem classe `main` de servidor web.
 
 No PowerShell, com Docker ativo:
 
@@ -86,11 +83,11 @@ Para gerar os três JARs com suas dependências, execute `mvn clean package` na 
 .\scripts\validate-dynamodb-local.ps1
 ```
 
-Veja [execução local e testes](docs/instalacao.md) para a seleção explícita do teste de integração e a conferência dos relatórios Surefire. **Nesta revisão documental, os testes Java não foram executados:** o ambiente disponível possui JDK 17 e não possui Maven; o projeto requer JDK 25.
+Veja [execução local e testes](docs/instalacao.md) para a seleção explícita do teste de integração e a conferência dos relatórios Surefire.
 
 ## Deploy
 
-Existe infraestrutura como código em [infrastructure/template.yaml](infrastructure/template.yaml) e uma alternativa de tabela isolada em [infrastructure/dynamodb-only.yaml](infrastructure/dynamodb-only.yaml). Isso comprova a existência dos templates, sem comprovar a implantação.
+Existe infraestrutura como código em [infrastructure/template.yaml](infrastructure/template.yaml) e uma alternativa de tabela isolada em [infrastructure/dynamodb-only.yaml](infrastructure/dynamodb-only.yaml). Os parâmetros de implantação são descritos no guia de deploy.
 
 Após preparar a conta AWS e revisar o template:
 
@@ -103,8 +100,8 @@ sam deploy --guided --template-file template.yaml
 
 O SAM aponta para JARs em `target/` e declara `SkipBuild: True`; compile com Maven antes do deploy. Informe e-mails reais verificados no SES e mantenha `DynamoDbEndpoint` vazio na cloud. O procedimento completo está em [deploy](docs/deploy.md).
 
-**Ainda pendente de DevOps:** revisar/provisionar a stack, configurar CI/CD, automatizar deploy, configurar ambientes e coletar evidências de execução. Não há URL de cloud validada nem workflow versionado nesta base. Há também [pendências de aplicação](docs/entrega.md) que não serão resolvidas apenas com deploy.
+## Código-fonte
 
-## Repositório e revisão no IntelliJ
+Repositório: [margustodev/fiap-tech-challenge-fase4](https://github.com/margustodev/fiap-tech-challenge-fase4).
 
-O repositório foi identificado como público pela integração GitHub nesta revisão. Antes da entrega, confirme acesso ao link em janela anônima. A documentação fica em Markdown e pode ser revisada no IntelliJ pela visualização e pelo diff de Git. Não versione credenciais AWS, arquivos pessoais ou resultados de build.
+Não versione credenciais AWS, arquivos pessoais ou resultados de build.

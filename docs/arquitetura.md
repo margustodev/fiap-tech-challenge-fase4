@@ -4,7 +4,7 @@
 
 ## Visão e fronteira
 
-A solução processa avaliações de cursos on-line com funções independentes e serviços gerenciados da AWS. O código compartilhado está em `common`; cada função produz seu próprio JAR. Não há frontend ou servidor Spring Boot neste repositório. O diagrama representa os fluxos implementados nos handlers e as integrações declaradas no SAM; a execução na cloud ainda depende de validação.
+A solução processa avaliações de cursos on-line com funções independentes e serviços gerenciados da AWS. O código compartilhado está em `common`; cada função produz seu próprio JAR. Não há frontend ou servidor Spring Boot neste repositório. O diagrama representa os fluxos implementados nos handlers e as integrações declaradas no SAM.
 
 ```mermaid
 flowchart TD
@@ -32,7 +32,7 @@ A resposta HTTP é síncrona apenas até a persistência. Notificação e relat�
 | EventBridge | Disparo semanal declarado no SAM; o período efetivo é calculado pelo relógio UTC da aplicação |
 | SES | Adaptadores implementados para e-mails de alerta e relatório; requer identidades verificadas e permissões |
 | SNS | Tópico declarado para alarmes CloudWatch; adaptador de alerta de negócio ainda não implementado |
-| SAM/CloudFormation | Descrição versionada de recursos e parâmetros; pipeline e provisionamento não comprovados |
+| SAM/CloudFormation | Descrição versionada de recursos e parâmetros de implantação |
 
 ## Organização interna
 
