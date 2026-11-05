@@ -64,6 +64,8 @@ fiap-tech-challenge-fase-4/
 ├── feedback-receiver/               # Lambda de recebimento
 ├── critical-notifier/               # Lambda de notificação crítica
 ├── weekly-reporter/                 # Lambda de relatório semanal
+├── docs/                             # Documentação técnica
+│   └── MONITORAMENTO_SEGURANCA.md
 ├── events/                          # Payloads de exemplo para sam local invoke
 ├── scripts/validate-dynamodb-local.ps1
 └── infrastructure/
@@ -97,9 +99,9 @@ Pacote base: `br.com.fiap.techchallenge.fase4`
 
 | Função | Permissões DynamoDB |
 |--------|---------------------|
-| `feedback-receiver` | `PutItem`, `GetItem`, `DescribeTable` (somente tabela) |
-| `weekly-reporter` | `GetItem`, `Query`, `DescribeTable` (tabela + `index/*`) |
-| `critical-notifier` | apenas Stream (`DescribeStream`, `GetRecords`, …) — sem leitura/escrita na tabela |
+| `feedback-receiver` | `PutItem` (somente tabela) |
+| `weekly-reporter` | `Query` (tabela + `index/*`) |
+| `critical-notifier` | Apenas DynamoDB Streams (`DescribeStream`, `GetRecords`, `GetShardIterator`, `ListStreams`) — sem leitura/escrita direta na tabela |
 
 ### Criar na cloud
 
@@ -176,21 +178,21 @@ Classes principais: `AvaliacaoEntity`, `DynamoDbAvaliacaoRepository`, `Avaliacoe
 - **Módulo:** `feedback-receiver`
 - **Handler:** `br.com.fiap.techchallenge.fase4.feedback.handler.FeedbackReceiverHandler`
 - **Entrada:** `APIGatewayProxyRequestEvent`
-- **Fluxo previsto:** deserializar → validar → calcular urgência → salvar no DynamoDB → métricas → response HTTP
+- **Fluxo:** deserializar → validar → calcular urgência → salvar no DynamoDB → registrar métricas → retornar resposta HTTP
 
 ### 2. CriticalNotificationHandler
 
 - **Módulo:** `critical-notifier`
 - **Handler:** `br.com.fiap.techchallenge.fase4.notifier.handler.CriticalNotificationHandler`
 - **Entrada:** `DynamodbEvent`
-- **Fluxo previsto:** ler NewImage → filtrar urgência ALTA/CRITICA → enviar SES/SNS
+- **Fluxo:** ler NewImage → filtrar urgência ALTA/CRITICA → enviar SES/SNS
 
 ### 3. WeeklyReportHandler
 
 - **Módulo:** `weekly-reporter`
 - **Handler:** `br.com.fiap.techchallenge.fase4.report.handler.WeeklyReportHandler`
 - **Entrada:** `ScheduledEvent`
-- **Fluxo previsto:** listar período semanal → agregar estatísticas → calcular média → enviar e-mail
+- **Fluxo:** listar período semanal → agregar estatísticas → calcular média → enviar e-mail
 
 ## Segurança e governança de acesso
 
@@ -199,14 +201,20 @@ Classes principais: `AvaliacaoEntity`, `DynamoDbAvaliacaoRepository`, `Avaliacoe
 - **Segredos:** e-mails e parâmetros via `Parameters` do SAM (não versionar credenciais)
 - **Logs:** evitar dados sensíveis; helpers em `SecurityConfig` / `DataPrivacyHelper`
 - **API Gateway:** métricas habilitadas; data trace desabilitado por padrão
+- **Tratamento de erros:** respostas HTTP 500 não expõem mensagens técnicas de exceções
 
 ## Monitoramento
 
 Configurado em `infrastructure/template.yaml`:
 
 - Alarmes de **Errors** para cada Lambda (notificam o tópico SNS)
+- Alarme personalizado para erros internos do `feedback-receiver`
 - **Dashboard** CloudWatch com invocações e erros
-- Logs automáticos via `AWSLambdaBasicExecutionRole`
+- Grupos de logs com retenção de 14 dias
+- Logs de acesso do API Gateway
+- Métricas personalizadas utilizando CloudWatch Embedded Metric Format (EMF)
+
+**Documentação detalhada:** [Monitoramento e Segurança — Tarefa 7](docs/MONITORAMENTO_SEGURANCA.md)
 
 ## Execução local
 
@@ -226,6 +234,7 @@ mvn clean package
 ### 2. Subir a API local (API Gateway + Lambda + DynamoDB Local)
 
 **Importante:** variáveis `$env:...` no PowerShell **não entram** no container da Lambda.
+
 Sem `DYNAMODB_ENDPOINT`, a função tenta a AWS real, fica pendurada e estoura **timeout 30s / 502**.
 
 Forma recomendada (um comando):
@@ -239,6 +248,7 @@ Ou manualmente:
 ```powershell
 # Terminal A — DynamoDB Local (com -sharedDb)
 docker start fiap-dynamodb-local
+
 # se não existir:
 # docker run -d --name fiap-dynamodb-local -p 8000:8000 amazon/dynamodb-local -jar DynamoDBLocal.jar -sharedDb -inMemory
 
@@ -258,6 +268,7 @@ sam local start-api --port 3000 --env-vars env-local.json `
 ```
 
 > Sem `DynamoDbEndpoint`, a Lambda tenta a AWS real e retorna 500/502.
+
 > Se a API ficar estranha após erros, limpe containers travados:
 > `docker ps -q --filter ancestor=public.ecr.aws/lambda/java:25-rapid-x86_64 | % { docker rm -f $_ }`
 
@@ -289,8 +300,6 @@ sam local invoke CriticalNotifierFunction -e ../events/dynamodb-stream.json
 sam local invoke WeeklyReporterFunction -e ../events/schedule.json
 ```
 
-> **Nota:** enquanto as classes forem esqueleto, a invocação sobe o runtime, mas a resposta de negócio ainda será vazia/`null` até a implementação.
-
 ## Instruções de deploy
 
 ### Pré-requisitos adicionais (nuvem)
@@ -315,14 +324,30 @@ sam deploy \
   --parameter-overrides \
     EnvironmentName=dev \
     AdminEmail=seu-admin@email.com \
-              SenderEmail=seu-remetente@email.com
+    SenderEmail=seu-remetente@email.com
 ```
 
 ## Artefatos de entrega
 
 - Repositório com código-fonte e IaC
+- Documentação de monitoramento e segurança da Tarefa 7
 - Vídeo de demonstração: funções ativas, API, notificações, relatório e configurações de cloud/segurança
 
 ## Status atual
 
-Estrutura de pacotes, classes, POMs e infraestrutura **criadas (esqueleto)**. A implementação da lógica de negócio das classes está pendente.
+Os módulos `common`, `feedback-receiver`, `critical-notifier` e `weekly-reporter` possuem implementações e testes automatizados.
+
+A suíte de testes foi executada com sucesso, totalizando **55 testes aprovados**, sem falhas ou erros.
+
+A infraestrutura AWS SAM está configurada, incluindo monitoramento, alarmes, dashboard e políticas de segurança IAM.
+
+As seguintes verificações locais foram concluídas:
+
+- Compilação Maven: **BUILD SUCCESS**
+- Testes automatizados: **55 aprovados**
+- Empacotamento AWS SAM: **Build Succeeded**
+- Validação estática do template SAM: **Aprovada**
+
+**Pendente:** realizar o deploy e validar o funcionamento dos recursos diretamente na AWS.
+
+A documentação técnica da Tarefa 7 está disponível em [Monitoramento e Segurança](docs/MONITORAMENTO_SEGURANCA.md).
