@@ -1,3 +1,4 @@
+
 package br.com.fiap.techchallenge.fase4.feedback.handler;
 
 import br.com.fiap.techchallenge.fase4.application.dto.AvaliacaoRequest;
@@ -17,16 +18,30 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Handler Lambda: recebe POST /avaliacao via API Gateway.
- * Responsabilidade única: entrada HTTP e orquestração do caso de uso de recebimento.
+ *
+ * Responsabilidade:
+ * - Receber a requisicao HTTP
+ * - Executar o caso de uso
+ * - Registrar metricas e logs
+ * - Retornar respostas HTTP seguras
  */
 public class FeedbackReceiverHandler
         implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(FeedbackReceiverHandler.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(FeedbackReceiverHandler.class);
 
-    private static final String METRIC_SUCESSO = "avaliacao.recebida.sucesso";
-    private static final String METRIC_ERRO_VALIDACAO = "avaliacao.recebida.erro_validacao";
-    private static final String METRIC_ERRO_INTERNO = "avaliacao.recebida.erro_interno";
+    private static final String METRIC_SUCESSO =
+            "avaliacao.recebida.sucesso";
+
+    private static final String METRIC_ERRO_VALIDACAO =
+            "avaliacao.recebida.erro_validacao";
+
+    private static final String METRIC_ERRO_INTERNO =
+            "avaliacao.recebida.erro_interno";
+
+    private static final String MENSAGEM_ERRO_INTERNO =
+            "Erro interno ao processar a avaliação.";
 
     private final FeedbackReceiverConfig config;
     private final JsonMapper jsonMapper;
@@ -34,22 +49,32 @@ public class FeedbackReceiverHandler
     private final MetricsService metricsService;
     private final ReceberAvaliacaoUseCase useCase;
 
+    /**
+     * Construtor utilizado pela AWS Lambda.
+     */
     public FeedbackReceiverHandler() {
-        System.out.println("[FeedbackReceiverHandler] iniciando construtor");
+        LOGGER.info("Inicializando FeedbackReceiverHandler");
+
         this.config = new FeedbackReceiverConfig();
         this.jsonMapper = config.jsonMapper();
         this.responseFactory = config.responseFactory();
         this.metricsService = config.metricsService();
-        // use case / DynamoDB só na primeira chamada (evita travar o init do runtime)
+
+        // DynamoDB inicializado apenas quando necessario.
         this.useCase = null;
-        System.out.println("[FeedbackReceiverHandler] construtor ok (DynamoDB lazy)");
+
+        LOGGER.info("FeedbackReceiverHandler inicializado");
     }
 
+    /**
+     * Construtor utilizado pelos testes automatizados.
+     */
     public FeedbackReceiverHandler(
             ReceberAvaliacaoUseCase useCase,
             JsonMapper jsonMapper,
             ApiGatewayResponseFactory responseFactory,
             MetricsService metricsService) {
+
         this.config = null;
         this.useCase = useCase;
         this.jsonMapper = jsonMapper;
@@ -57,38 +82,80 @@ public class FeedbackReceiverHandler
         this.metricsService = metricsService;
     }
 
+    /**
+     * Recupera o caso de uso, mantendo a inicializacao lazy.
+     */
     private ReceberAvaliacaoUseCase useCase() {
         if (useCase != null) {
             return useCase;
         }
+
         return config.receberAvaliacaoUseCase();
     }
 
     @Override
-    public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent input, Context context) {
-        System.out.println("[FeedbackReceiverHandler] handleRequest start");
-        LOGGER.info("Recebendo POST /avaliacao requestId={}",
-                context != null ? context.getAwsRequestId() : "local");
+    public APIGatewayProxyResponseEvent handleRequest(
+            APIGatewayProxyRequestEvent input,
+            Context context) {
+
+        String requestId = context != null
+                ? context.getAwsRequestId()
+                : "local";
+
+        LOGGER.info(
+                "Recebendo POST /avaliacao requestId={}",
+                requestId
+        );
 
         try {
-            AvaliacaoRequest request = jsonMapper.fromJson(input != null ? input.getBody() : null, AvaliacaoRequest.class);
+            AvaliacaoRequest request = jsonMapper.fromJson(
+                    input != null ? input.getBody() : null,
+                    AvaliacaoRequest.class
+            );
+
             AvaliacaoResponse response = useCase().executar(request);
 
+            // Registra sucesso no CloudWatch EMF.
             metricsService.incrementarContador(METRIC_SUCESSO);
-            LOGGER.info("Avaliação aceita id={} urgencia={}", response.getId(), response.getUrgencia());
+
+            LOGGER.info(
+                    "Avaliação aceita id={} urgencia={}",
+                    response.getId(),
+                    response.getUrgencia()
+            );
+
             return responseFactory.sucesso(201, response);
 
         } catch (AvaliacaoInvalidaException e) {
+
+            // Registra erro de validacao.
             metricsService.incrementarContador(METRIC_ERRO_VALIDACAO);
-            LOGGER.warn("Avaliação inválida: {}", e.getMessage());
+
+            LOGGER.warn(
+                    "Avaliação inválida requestId={}: {}",
+                    requestId,
+                    e.getMessage()
+            );
+
             return responseFactory.erro(400, e.getMessage());
 
         } catch (Exception e) {
+
+            // Registra erro interno para monitoramento.
             metricsService.incrementarContador(METRIC_ERRO_INTERNO);
-            LOGGER.error("Erro ao processar avaliação", e);
-            e.printStackTrace();
-            return responseFactory.erro(500, "Erro interno ao processar a avaliação: " + e.getMessage());
+
+            // Detalhes tecnicos permanecem somente nos logs.
+            LOGGER.error(
+                    "Erro interno ao processar avaliação requestId={}",
+                    requestId,
+                    e
+            );
+
+            // Nunca retorna detalhes internos da excecao ao cliente.
+            return responseFactory.erro(
+                    500,
+                    MENSAGEM_ERRO_INTERNO
+            );
         }
     }
-
 }

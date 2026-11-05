@@ -1,3 +1,4 @@
+
 package br.com.fiap.techchallenge.fase4.feedback.handler;
 
 import br.com.fiap.techchallenge.fase4.application.dto.AvaliacaoRequest;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FeedbackReceiverHandlerTest {
@@ -37,7 +39,9 @@ class FeedbackReceiverHandlerTest {
     void setUp() {
         useCase = new FakeReceberAvaliacaoUseCase();
         metricsService = new RecordingMetricsService();
+
         JsonMapper jsonMapper = new JsonMapper();
+
         handler = new FeedbackReceiverHandler(
                 useCase,
                 jsonMapper,
@@ -49,18 +53,28 @@ class FeedbackReceiverHandlerTest {
     @Test
     void deveRetornar201QuandoSucesso() {
         useCase.response = new AvaliacaoResponse(
-                "id-1", "Curso ok", 9, Urgencia.BAIXA, Instant.parse("2026-10-27T12:00:00Z")
+                "id-1",
+                "Curso ok",
+                9,
+                Urgencia.BAIXA,
+                Instant.parse("2026-10-27T12:00:00Z")
         );
 
         APIGatewayProxyResponseEvent response = handler.handleRequest(
-                new APIGatewayProxyRequestEvent().withBody("{\"descricao\":\"Curso ok\",\"nota\":9}"),
+                new APIGatewayProxyRequestEvent()
+                        .withBody("{\"descricao\":\"Curso ok\",\"nota\":9}"),
                 fakeContext()
         );
 
         assertEquals(201, response.getStatusCode());
         assertTrue(response.getBody().contains("id-1"));
         assertTrue(response.getBody().contains("BAIXA"));
-        assertTrue(metricsService.contadores.contains("avaliacao.recebida.sucesso"));
+
+        assertTrue(
+                metricsService.contadores.contains(
+                        "avaliacao.recebida.sucesso"
+                )
+        );
     }
 
     @Test
@@ -70,41 +84,75 @@ class FeedbackReceiverHandlerTest {
         );
 
         APIGatewayProxyResponseEvent response = handler.handleRequest(
-                new APIGatewayProxyRequestEvent().withBody("{\"descricao\":\"x\",\"nota\":99}"),
+                new APIGatewayProxyRequestEvent()
+                        .withBody("{\"descricao\":\"x\",\"nota\":99}"),
                 fakeContext()
         );
 
         assertEquals(400, response.getStatusCode());
         assertTrue(response.getBody().contains("nota"));
-        assertTrue(metricsService.contadores.contains("avaliacao.recebida.erro_validacao"));
+
+        assertTrue(
+                metricsService.contadores.contains(
+                        "avaliacao.recebida.erro_validacao"
+                )
+        );
     }
 
     @Test
     void deveRetornar400QuandoJsonInvalido() {
         APIGatewayProxyResponseEvent response = handler.handleRequest(
-                new APIGatewayProxyRequestEvent().withBody("{invalido"),
+                new APIGatewayProxyRequestEvent()
+                        .withBody("{invalido"),
                 fakeContext()
         );
 
         assertEquals(400, response.getStatusCode());
-        assertTrue(metricsService.contadores.contains("avaliacao.recebida.erro_validacao"));
+
+        assertTrue(
+                metricsService.contadores.contains(
+                        "avaliacao.recebida.erro_validacao"
+                )
+        );
     }
 
     @Test
     void deveRetornar500QuandoErroInesperado() {
+        // Simula um erro interno com detalhes tecnicos sensiveis.
         useCase.erroInterno = new RuntimeException("falha dynamodb");
 
         APIGatewayProxyResponseEvent response = handler.handleRequest(
-                new APIGatewayProxyRequestEvent().withBody("{\"descricao\":\"x\",\"nota\":5}"),
+                new APIGatewayProxyRequestEvent()
+                        .withBody("{\"descricao\":\"x\",\"nota\":5}"),
                 fakeContext()
         );
 
+        // O status HTTP deve continuar sendo 500.
         assertEquals(500, response.getStatusCode());
-        assertTrue(metricsService.contadores.contains("avaliacao.recebida.erro_interno"));
+
+        // A metrica de erro interno deve continuar sendo registrada.
+        assertTrue(
+                metricsService.contadores.contains(
+                        "avaliacao.recebida.erro_interno"
+                )
+        );
+
+        // O cliente recebe apenas uma mensagem generica.
+        assertTrue(
+                response.getBody().contains(
+                        "Erro interno ao processar a avaliação."
+                )
+        );
+
+        // Detalhes tecnicos nunca devem aparecer na resposta HTTP.
+        assertFalse(
+                response.getBody().contains("falha dynamodb")
+        );
     }
 
     private static Context fakeContext() {
         return new Context() {
+
             @Override
             public String getAwsRequestId() {
                 return "req-1";
@@ -162,7 +210,8 @@ class FeedbackReceiverHandlerTest {
         };
     }
 
-    private static final class FakeReceberAvaliacaoUseCase extends ReceberAvaliacaoUseCase {
+    private static final class FakeReceberAvaliacaoUseCase
+            extends ReceberAvaliacaoUseCase {
 
         private AvaliacaoResponse response;
         private AvaliacaoInvalidaException erroValidacao;
@@ -174,6 +223,7 @@ class FeedbackReceiverHandlerTest {
                     new CalcularUrgenciaService(),
                     new AvaliacaoMapper(),
                     new AvaliacaoRepository() {
+
                         @Override
                         public Avaliacao salvar(Avaliacao avaliacao) {
                             return avaliacao;
@@ -185,7 +235,9 @@ class FeedbackReceiverHandlerTest {
                         }
 
                         @Override
-                        public List<Avaliacao> listarPorPeriodo(Instant inicio, Instant fim) {
+                        public List<Avaliacao> listarPorPeriodo(
+                                Instant inicio,
+                                Instant fim) {
                             return List.of();
                         }
                     }
@@ -197,14 +249,17 @@ class FeedbackReceiverHandlerTest {
             if (erroValidacao != null) {
                 throw erroValidacao;
             }
+
             if (erroInterno != null) {
                 throw erroInterno;
             }
+
             return response;
         }
     }
 
-    private static final class RecordingMetricsService implements MetricsService {
+    private static final class RecordingMetricsService
+            implements MetricsService {
 
         private final List<String> contadores = new ArrayList<>();
 
@@ -215,8 +270,7 @@ class FeedbackReceiverHandlerTest {
 
         @Override
         public void registrarValor(String nomeMetrica, double valor) {
-            // não usado nestes testes
+            // Nao utilizado nestes testes.
         }
     }
-
 }
