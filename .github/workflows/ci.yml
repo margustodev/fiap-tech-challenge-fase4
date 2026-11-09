@@ -1,0 +1,66 @@
+name: CI
+
+# Validacao de PRs. Nao usa credenciais AWS nem publica nada.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compilar e rodar testes
+        run: mvn -B verify
+
+  integration-dynamodb:
+    name: Integracao DynamoDB
+    runs-on: ubuntu-latest
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:3.3.2
+        ports:
+          - 8000:8000
+    env:
+      RUN_DYNAMODB_IT: 'true'
+      DYNAMODB_ENDPOINT: http://localhost:8000
+      AVALIACOES_TABLE_NAME: dev-avaliacoes
+      AWS_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      # O Surefire nao inclui classes *IT por padrao, por isso a selecao explicita.
+      - name: Rodar teste de integracao
+        run: mvn -B -pl common -am test -Dtest=DynamoDbAvaliacaoRepositoryIT -Dsurefire.failIfNoSpecifiedTests=false
+
+  infrastructure:
+    name: Validacao da infraestrutura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aws-actions/setup-sam@341eee193f458fa5aae5d52c94b0c5cf3a1c5a52 # v3
+        with:
+          use-installer: true
+      - name: Validar template da aplicacao
+        run: sam validate --lint -t infrastructure/template.yaml --region us-east-1
+      - name: Validar template de bootstrap
+        run: sam validate --lint -t infrastructure/bootstrap.yaml --region us-east-1
+      - name: Testar script de verificacao pos-deploy
+        run: bash scripts/tests/smoke-test.test.sh

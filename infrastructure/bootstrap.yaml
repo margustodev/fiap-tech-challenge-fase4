@@ -1,0 +1,418 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  FIAP Tech Challenge Fase 4 - Base da conta AWS, aplicada uma unica vez.
+  Contem somente recursos unicos por conta, que nao podem se repetir nas stacks
+  de cada ambiente: identidade do GitHub, role de deploy, bucket de artefatos,
+  identidades SES, role de logs do API Gateway e alerta de custo.
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: margustodev
+    Description: Dono do repositorio autorizado a publicar
+
+  GitHubRepository:
+    Type: String
+    Default: fiap-tech-challenge-fase4
+    Description: Repositorio autorizado a publicar
+
+  AdminEmail:
+    Type: String
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    Description: E-mail dos administradores (verificado no SES e usado no alerta de custo)
+
+  SenderEmail:
+    Type: String
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    Description: E-mail remetente (verificado no SES)
+
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    Description: Limite mensal de gasto, em dolares, usado no alerta de custo
+
+Conditions:
+  AdminDifferentFromSender: !Not [!Equals [!Ref AdminEmail, !Ref SenderEmail]]
+
+Resources:
+
+  #############################################################################
+  # Autenticacao da pipeline, sem chaves de longa duracao
+  #############################################################################
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: fiap-fase4-github-deploy
+      Description: Assumida somente pelos GitHub Environments dev e prod deste repositorio
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  - !Sub 'repo:${GitHubOwner}/${GitHubRepository}:environment:dev'
+                  - !Sub 'repo:${GitHubOwner}/${GitHubRepository}:environment:prod'
+      Policies:
+        - PolicyName: DeployApplicationStacks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+
+              # Somente as stacks da aplicacao. Esta stack de bootstrap fica fora do alcance.
+              - Sid: ManageApplicationStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:GetTemplate
+                  - cloudformation:ListChangeSets
+                  - cloudformation:ListStackResources
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/fiap-tech-challenge-fase-4-dev/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/fiap-tech-challenge-fase-4-prod/*'
+
+              - Sid: UseServerlessTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31'
+
+              # Estas acoes nao aceitam restricao por recurso.
+              - Sid: ReadTemplates
+                Effect: Allow
+                Action:
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:ValidateTemplate
+                Resource: '*'
+
+              - Sid: ListArtifactBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !GetAtt ArtifactBucket.Arn
+
+              - Sid: ReadWriteArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${ArtifactBucket.Arn}/*'
+
+              - Sid: ManageFunctions
+                Effect: Allow
+                Action:
+                  - lambda:AddPermission
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:Get*
+                  - lambda:ListTags
+                  - lambda:ListVersionsByFunction
+                  - lambda:RemovePermission
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:dev-*'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:prod-*'
+
+              - Sid: ManageEventSourceMappings
+                Effect: Allow
+                Action:
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:GetEventSourceMapping
+                  - lambda:UpdateEventSourceMapping
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*'
+
+              # Estas acoes nao aceitam restricao pelo nome da funcao como recurso.
+              - Sid: CreateEventSourceMappings
+                Effect: Allow
+                Action:
+                  - lambda:CreateEventSourceMapping
+                  - lambda:ListEventSourceMappings
+                Resource: '*'
+
+              # O API Gateway usa IDs gerados e nao permite restricao pelo nome da API.
+              - Sid: ManageRestApis
+                Effect: Allow
+                Action:
+                  - apigateway:DELETE
+                  - apigateway:GET
+                  - apigateway:PATCH
+                  - apigateway:POST
+                  - apigateway:PUT
+                Resource:
+                  - !Sub 'arn:aws:apigateway:${AWS::Region}::/restapis'
+                  - !Sub 'arn:aws:apigateway:${AWS::Region}::/restapis/*'
+                  - !Sub 'arn:aws:apigateway:${AWS::Region}::/tags/*'
+
+              # Somente plano de controle. A pipeline nao le nem grava avaliacoes.
+              - Sid: ManageTables
+                Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:Describe*
+                  - dynamodb:GetResourcePolicy
+                  - dynamodb:List*
+                  - dynamodb:TagResource
+                  - dynamodb:UntagResource
+                  - dynamodb:UpdateContinuousBackups
+                  - dynamodb:UpdateContributorInsights
+                  - dynamodb:UpdateTable
+                  - dynamodb:UpdateTimeToLive
+                Resource:
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/dev-*'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/prod-*'
+
+              - Sid: ManageFunctionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRolePolicies
+                  - iam:ListRoleTags
+                  - iam:PutRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/dev-*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/prod-*'
+
+              # Impede anexar politicas amplas, como AdministratorAccess, as roles das funcoes.
+              - Sid: AttachOnlyLambdaBasicExecution
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/dev-*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/prod-*'
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN: arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+              - Sid: PassRolesOnlyToLambda
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/dev-*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/prod-*'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+
+              - Sid: ManageLogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:DeleteRetentionPolicy
+                  - logs:ListTagsForResource
+                  - logs:ListTagsLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:TagLogGroup
+                  - logs:TagResource
+                  - logs:UntagLogGroup
+                  - logs:UntagResource
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/dev-*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/prod-*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/dev-*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/prod-*'
+
+              # Esta acao nao aceita restricao por recurso.
+              - Sid: DescribeLogGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: '*'
+
+              - Sid: ManageTopics
+                Effect: Allow
+                Action:
+                  - sns:CreateTopic
+                  - sns:DeleteTopic
+                  - sns:Get*
+                  - sns:List*
+                  - sns:SetTopicAttributes
+                  - sns:Subscribe
+                  - sns:TagResource
+                  - sns:Unsubscribe
+                  - sns:UntagResource
+                Resource:
+                  - !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:dev-*'
+                  - !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:prod-*'
+
+              - Sid: ManageScheduleRules
+                Effect: Allow
+                Action:
+                  - events:DeleteRule
+                  - events:DescribeRule
+                  - events:DisableRule
+                  - events:EnableRule
+                  - events:ListTagsForResource
+                  - events:ListTargetsByRule
+                  - events:PutRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                  - events:TagResource
+                  - events:UntagResource
+                Resource:
+                  - !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/dev-*'
+                  - !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/prod-*'
+
+              - Sid: ManageAlarms
+                Effect: Allow
+                Action:
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:ListTagsForResource
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:TagResource
+                  - cloudwatch:UntagResource
+                Resource:
+                  - !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:dev-*'
+                  - !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:prod-*'
+
+              - Sid: ManageDashboards
+                Effect: Allow
+                Action:
+                  - cloudwatch:DeleteDashboards
+                  - cloudwatch:GetDashboard
+                  - cloudwatch:PutDashboard
+                Resource:
+                  - !Sub 'arn:aws:cloudwatch::${AWS::AccountId}:dashboard/dev-*'
+                  - !Sub 'arn:aws:cloudwatch::${AWS::AccountId}:dashboard/prod-*'
+
+  #############################################################################
+  # Artefatos de deploy
+  #############################################################################
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'fiap-fase4-artifacts-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+
+  #############################################################################
+  # Identidades SES, necessarias para enviar e receber no modo sandbox
+  #############################################################################
+
+  SenderEmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref SenderEmail
+
+  AdminEmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    Condition: AdminDifferentFromSender
+    Properties:
+      EmailIdentity: !Ref AdminEmail
+
+  #############################################################################
+  # Logs do API Gateway, configuracao unica por conta e regiao
+  #############################################################################
+
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: fiap-fase4-apigateway-cloudwatch
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+
+  #############################################################################
+  # Alerta de custo
+  #############################################################################
+
+  MonthlyCostBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: fiap-fase4-monthly-cost
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AdminEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AdminEmail
+
+Outputs:
+
+  DeployRoleArn:
+    Description: Valor da variavel AWS_DEPLOY_ROLE_ARN no GitHub
+    Value: !GetAtt GitHubDeployRole.Arn
+
+  ArtifactBucketName:
+    Description: Valor da variavel ARTIFACT_BUCKET no GitHub
+    Value: !Ref ArtifactBucket

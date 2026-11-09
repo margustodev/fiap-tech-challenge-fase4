@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      # TEMPORARIO: valida o deploy em dev antes do merge. Remover antes de integrar o PR.
+      - feature/task-06-deploy-devops
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unico dos artefatos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compilar, testar e empacotar
+        run: mvn -B verify
+      - name: Guardar JARs das funcoes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lambda-jars
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            feedback-receiver/target/feedback-receiver-1.0.0-SNAPSHOT.jar
+            critical-notifier/target/critical-notifier-1.0.0-SNAPSHOT.jar
+            weekly-reporter/target/weekly-reporter-1.0.0-SNAPSHOT.jar
+
+  deploy-dev:
+    name: Ambiente dev
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: dev
+      smoke-mode: full
+    secrets: inherit
+
+  deploy-prod:
+    name: Ambiente prod
+    needs: deploy-dev
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: prod
+      smoke-mode: readonly
+    secrets: inherit

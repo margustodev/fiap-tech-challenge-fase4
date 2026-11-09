@@ -302,6 +302,8 @@ sam local invoke WeeklyReporterFunction -e ../events/schedule.json
 
 ## Instruções de deploy
 
+O deploy automatizado (CI/CD, ambientes e configuração inicial) está documentado em [Deploy e CI/CD — Tarefa 6](docs/DEPLOY_CICD.md).
+
 ### Pré-requisitos adicionais (nuvem)
 
 - AWS CLI configurado (`aws configure`)
