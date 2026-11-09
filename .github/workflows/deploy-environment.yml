@@ -1,0 +1,84 @@
+name: Deploy de ambiente
+
+# Publica os JARs ja compilados em um ambiente e verifica a API publicada.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub Environment e sufixo da stack (dev ou prod)
+        type: string
+        required: true
+      smoke-mode:
+        description: Modo da verificacao pos-deploy (full ou readonly)
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy e verificacao
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+      SMOKE_MODE: ${{ inputs.smoke-mode }}
+      STACK_NAME: fiap-tech-challenge-fase-4-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Baixar JARs das funcoes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lambda-jars
+          path: .
+
+      - name: Conferir configuracao do ambiente
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        run: |
+          missing=0
+          for name in AWS_DEPLOY_ROLE_ARN ARTIFACT_BUCKET ADMIN_EMAIL SENDER_EMAIL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Configuracao ausente: $name"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: aws-actions/setup-sam@341eee193f458fa5aae5d52c94b0c5cf3a1c5a52 # v3
+        with:
+          use-installer: true
+
+      - name: Autenticar na AWS por OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Publicar stack
+        working-directory: infrastructure
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        run: |
+          sam deploy \
+            --config-env "$TARGET_ENV" \
+            --s3-bucket "$ARTIFACT_BUCKET" \
+            --s3-prefix "$TARGET_ENV" \
+            --no-progressbar \
+            --parameter-overrides "EnvironmentName=$TARGET_ENV AdminEmail=$ADMIN_EMAIL SenderEmail=$SENDER_EMAIL"
+
+      - name: Verificar API publicada
+        run: |
+          endpoint="$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
+            --output text)"
+          echo "Endpoint: $endpoint"
+          bash scripts/smoke-test.sh "$endpoint" "$SMOKE_MODE"
