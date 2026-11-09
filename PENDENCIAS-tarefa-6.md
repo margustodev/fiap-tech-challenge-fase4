@@ -85,15 +85,13 @@ aws cloudformation describe-stacks \
 
 ### 2. Configurar o GitHub (precisa de admin no repositório)
 
-O Marcelo é o dono do repositório, e o Lucas tem apenas permissão de escrita.
-
 - [ ] Com a branch baixada e o GitHub CLI autenticado, rodar na raiz do projeto, no Git Bash:
 
 ```bash
 bash scripts/setup-github.sh <DeployRoleArndev> <DeployRoleArnprod> <ArtifactBucketName> <email-admin> <email-remetente>
 ```
 
-Os aprovadores padrão de `prod` são Lucas e Marcelo.
+Os aprovadores de `prod` são definidos pela variável `PROD_APPROVERS` do script.
 
 ### 3. Primeiro deploy em `dev`
 
@@ -138,7 +136,7 @@ Esta lista completa as validações deixadas pela Tarefa 7.
 
 Estas opções foram adotadas no código, mas ainda não foram confirmadas pelo grupo:
 
-- Aprovadores de `prod`: Marcelo.
+- Aprovadores de `prod`.
 - Alerta de gasto de US$ 10 por mês, com avisos em 80% e 100%.
 - Validações obrigatórias para integrar na `main`.
 

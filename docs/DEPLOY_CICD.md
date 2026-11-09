@@ -98,7 +98,7 @@ O script cria:
 | `ARTIFACT_BUCKET` | Variável do repositório | Output `ArtifactBucketName` |
 | `ADMIN_EMAIL` | Secret de `dev` e `prod` | E-mail dos administradores |
 | `SENDER_EMAIL` | Secret de `dev` e `prod` | E-mail remetente |
-| Aprovadores de `prod` | Environment `prod` | Lucas e Marcelo |
+| Aprovadores de `prod` | Environment `prod` | Logins definidos em `PROD_APPROVERS` |
 | Validações obrigatórias | Branch `main` | Os três jobs do CI |
 
 ### 4.3. Depois do primeiro deploy
@@ -126,7 +126,7 @@ A nota 10 tem urgência `BAIXA` e não gera e-mail crítico. Em `prod` nada é g
 ## 6. Segurança e governança de acesso
 
 - **Quem pode publicar:** existe uma role por ambiente, e cada uma aceita somente o Environment correspondente deste repositório. PRs não têm acesso à AWS.
-- **O que pode ser publicado em `prod`:** apenas a branch `main`, com aprovação de Lucas ou Marcelo. A role de `dev` não alcança nenhum recurso de `prod`, então a aprovação não pode ser contornada por meio dela.
+- **O que pode ser publicado em `prod`:** apenas a branch `main`, com aprovação de um dos aprovadores configurados. A role de `dev` não alcança nenhum recurso de `prod`, então a aprovação não pode ser contornada por meio dela.
 - **O que a pipeline alcança:** somente a stack e os recursos com o prefixo do próprio ambiente. A stack de bootstrap fica fora do alcance dela.
 - **Dados:** a pipeline só tem permissões de plano de controle no DynamoDB, sem leitura ou gravação de avaliações.
 - **Actions de terceiros:** fixadas por SHA do commit.
