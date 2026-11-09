@@ -320,7 +320,7 @@ Ou com parâmetros:
 
 ```bash
 sam deploy \
-  --stack-name fiap-tech-challenge-fase-4 \
+  --stack-name fiap-tech-challenge-fase-4-dev \
   --capabilities CAPABILITY_NAMED_IAM \
   --resolve-s3 \
   --parameter-overrides \

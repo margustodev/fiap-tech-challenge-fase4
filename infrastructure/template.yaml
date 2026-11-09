@@ -363,6 +363,8 @@ Resources:
     Properties:
       Name: !Sub '${EnvironmentName}-feedback-api'
       StageName: !Ref EnvironmentName
+      # Sem esta opcao o SAM cria um estagio extra, "Stage", sem os limites de requisicao.
+      OpenApiVersion: '3.0.1'
       TracingEnabled: true
 
       AccessLogSetting:

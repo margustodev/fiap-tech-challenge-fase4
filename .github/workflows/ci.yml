@@ -48,7 +48,7 @@ jobs:
           cache: maven
       # O Surefire nao inclui classes *IT por padrao, por isso a selecao explicita.
       - name: Rodar teste de integracao
-        run: mvn -B -pl common -am test -Dtest=DynamoDbAvaliacaoRepositoryIT -Dsurefire.failIfNoSpecifiedTests=false
+        run: mvn -B -pl common -am test -Dtest=DynamoDbAvaliacaoRepositoryIT
 
   infrastructure:
     name: Validacao da infraestrutura

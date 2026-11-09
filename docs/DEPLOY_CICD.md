@@ -40,7 +40,7 @@ flowchart TD
 
 | Componente | Função |
 |---|---|
-| `infrastructure/bootstrap.yaml` | Base da conta: OIDC, role de deploy, bucket de artefatos, identidades SES, role de logs do API Gateway e alerta de custo |
+| `infrastructure/bootstrap.yaml` | Base da conta: OIDC, uma role de deploy por ambiente, bucket de artefatos, identidades SES, role de logs do API Gateway e alerta de custo |
 | `infrastructure/template.yaml` | Aplicação: API, funções, tabela, tópico, alarmes e dashboard |
 | `infrastructure/samconfig.toml` | Perfis `dev` e `prod`, cada um com sua stack |
 | `.github/workflows/ci.yml` | Validação de PRs |
@@ -63,7 +63,7 @@ Estes passos são feitos uma única vez.
 aws cloudformation deploy \
   --template-file bootstrap.yaml \
   --stack-name fiap-tech-challenge-fase-4-bootstrap \
-  --capabilities CAPABILITY_NAMED_IAM \
+  --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
     AdminEmail=seu-admin@email.com \
     SenderEmail=seu-remetente@email.com \
@@ -85,14 +85,16 @@ aws cloudformation describe-stacks \
 Com permissão de admin no repositório, execute na raiz do projeto:
 
 ```bash
-bash scripts/setup-github.sh <DeployRoleArn> <ArtifactBucketName> seu-admin@email.com seu-remetente@email.com
+bash scripts/setup-github.sh <DeployRoleArndev> <DeployRoleArnprod> <ArtifactBucketName> seu-admin@email.com seu-remetente@email.com
 ```
+
+Em um fork, aplique o bootstrap com `GitHubOwner=<seu-usuario>` e execute o script com `GITHUB_REPO=<seu-usuario>/fiap-tech-challenge-fase4` e `PROD_APPROVERS=<seu-usuario>`.
 
 O script cria:
 
 | Item | Onde | Valor |
 |---|---|---|
-| `AWS_DEPLOY_ROLE_ARN` | Variável do repositório | Output `DeployRoleArn` |
+| `AWS_DEPLOY_ROLE_ARN` | Variável de cada Environment | Outputs `DeployRoleArndev` e `DeployRoleArnprod` |
 | `ARTIFACT_BUCKET` | Variável do repositório | Output `ArtifactBucketName` |
 | `ADMIN_EMAIL` | Secret de `dev` e `prod` | E-mail dos administradores |
 | `SENDER_EMAIL` | Secret de `dev` e `prod` | E-mail remetente |
@@ -123,9 +125,9 @@ A nota 10 tem urgência `BAIXA` e não gera e-mail crítico. Em `prod` nada é g
 
 ## 6. Segurança e governança de acesso
 
-- **Quem pode publicar:** a role aceita somente os Environments `dev` e `prod` deste repositório. PRs não têm acesso à AWS.
-- **O que pode ser publicado em `prod`:** apenas a branch `main`, com aprovação de Lucas ou Marcelo.
-- **O que a pipeline alcança:** somente as stacks da aplicação e recursos com prefixo `dev-` ou `prod-`. A stack de bootstrap fica fora do alcance dela.
+- **Quem pode publicar:** existe uma role por ambiente, e cada uma aceita somente o Environment correspondente deste repositório. PRs não têm acesso à AWS.
+- **O que pode ser publicado em `prod`:** apenas a branch `main`, com aprovação de Lucas ou Marcelo. A role de `dev` não alcança nenhum recurso de `prod`, então a aprovação não pode ser contornada por meio dela.
+- **O que a pipeline alcança:** somente a stack e os recursos com o prefixo do próprio ambiente. A stack de bootstrap fica fora do alcance dela.
 - **Dados:** a pipeline só tem permissões de plano de controle no DynamoDB, sem leitura ou gravação de avaliações.
 - **Actions de terceiros:** fixadas por SHA do commit.
 - **Dados pessoais em logs:** os e-mails são secrets e ficam mascarados nos logs públicos.
@@ -147,6 +149,13 @@ A nota 10 tem urgência `BAIXA` e não gera e-mail crítico. Em `prod` nada é g
 | Falha na verificação em `dev` | `prod` não é liberado | Reverter ou corrigir o código |
 | Falha na verificação em `prod` | O job falha e a versão continua publicada | Reverter o commit e publicar novamente |
 | Permissão negada na role de deploy | O deploy falha com `AccessDenied` | Ajustar `bootstrap.yaml` e reaplicá-lo |
+| Falha na primeira criação de uma stack | A stack fica em `ROLLBACK_COMPLETE` e não aceita novo deploy | Excluir a stack, como abaixo, e publicar novamente |
+
+A role de deploy não pode excluir stacks. Para remover uma stack em `ROLLBACK_COMPLETE`, use o CloudShell:
+
+```bash
+aws cloudformation delete-stack --stack-name fiap-tech-challenge-fase-4-dev
+```
 
 ## 8. Execução manual
 
@@ -157,6 +166,8 @@ mvn clean package -DskipTests
 cd infrastructure
 sam deploy --guided
 ```
+
+Esse comando atualiza a mesma stack de `dev` usada pela pipeline.
 
 Para remover um ambiente:
 

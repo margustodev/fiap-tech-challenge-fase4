@@ -2,24 +2,25 @@
 # Configura variaveis, Environments, secrets e protecao da main no GitHub.
 # Exige GitHub CLI autenticado com permissao de admin no repositorio.
 #
-# Uso: bash scripts/setup-github.sh <role-arn> <bucket> <admin-email> <sender-email>
-# Os dois primeiros valores sao os outputs da stack de bootstrap.
+# Uso: bash scripts/setup-github.sh <role-dev> <role-prod> <bucket> <admin-email> <sender-email>
+# Os tres primeiros valores sao os outputs da stack de bootstrap.
+# Para usar em um fork, defina GITHUB_REPO=dono/repo e PROD_APPROVERS="login1 login2".
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
-  echo "Uso: $0 <role-arn> <bucket> <admin-email> <sender-email>" >&2
+if [ "$#" -ne 5 ]; then
+  echo "Uso: $0 <role-dev> <role-prod> <bucket> <admin-email> <sender-email>" >&2
   exit 2
 fi
 
-ROLE_ARN="$1"
-BUCKET="$2"
-ADMIN_EMAIL="$3"
-SENDER_EMAIL="$4"
+DEV_ROLE_ARN="$1"
+PROD_ROLE_ARN="$2"
+BUCKET="$3"
+ADMIN_EMAIL="$4"
+SENDER_EMAIL="$5"
 REPO="${GITHUB_REPO:-margustodev/fiap-tech-challenge-fase4}"
 APPROVERS="${PROD_APPROVERS:-git-lucasoliveira margustodev}"
 
-echo "==> Variaveis do repositorio"
-gh variable set AWS_DEPLOY_ROLE_ARN --repo "$REPO" --body "$ROLE_ARN"
+echo "==> Variavel do repositorio"
 gh variable set ARTIFACT_BUCKET --repo "$REPO" --body "$BUCKET"
 
 reviewers=""
@@ -46,6 +47,10 @@ if ! gh api "repos/$REPO/environments/prod/deployment-branch-policies" --jq '.br
   gh api -X POST "repos/$REPO/environments/prod/deployment-branch-policies" \
     --silent -f name=main -f type=branch
 fi
+
+echo "==> Role de deploy de cada Environment"
+gh variable set AWS_DEPLOY_ROLE_ARN --repo "$REPO" --env dev --body "$DEV_ROLE_ARN"
+gh variable set AWS_DEPLOY_ROLE_ARN --repo "$REPO" --env prod --body "$PROD_ROLE_ARN"
 
 echo "==> Secrets dos Environments"
 for environment in dev prod; do
