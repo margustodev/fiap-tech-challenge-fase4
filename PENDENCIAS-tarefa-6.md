@@ -51,13 +51,7 @@ Estas verificações foram executadas na máquina local:
 
 ## Pendências, em ordem
 
-### 1. Enviar o código ao GitHub
-
-- [x] Enviar a branch `feature/task-06-deploy-devops` para o repositório do grupo e abrir o PR como draft.
-
-O workflow de deploy vai falhar na etapa "Conferir configuração do ambiente" até o item 3 ser concluído. Isso é esperado. A etapa de build já comprova se o projeto compila no GitHub.
-
-### 2. Preparar a conta AWS
+### 1. Preparar a conta AWS
 
 - [ ] Ter uma conta AWS normal. **AWS Academy / Learner Lab não serve**, porque o bootstrap cria roles IAM e OIDC.
 - [ ] Ativar MFA no usuário root.
@@ -89,7 +83,7 @@ aws cloudformation describe-stacks \
 
 - [ ] Clicar nos links de verificação que o SES enviar aos e-mails informados.
 
-### 3. Configurar o GitHub (precisa de admin no repositório)
+### 2. Configurar o GitHub (precisa de admin no repositório)
 
 O Marcelo é o dono do repositório, e o Lucas tem apenas permissão de escrita.
 
@@ -101,7 +95,7 @@ bash scripts/setup-github.sh <DeployRoleArndev> <DeployRoleArnprod> <ArtifactBuc
 
 Os aprovadores padrão de `prod` são Lucas e Marcelo.
 
-### 4. Primeiro deploy em `dev`
+### 3. Primeiro deploy em `dev`
 
 - [ ] Em **Actions > Deploy**, reexecutar a execução da branch.
 - [ ] Confirmar que a etapa **Verificar API publicada** passou.
@@ -115,7 +109,7 @@ Os aprovadores padrão de `prod` são Lucas e Marcelo.
 
 Possíveis permissões faltantes, apontadas na revisão: leitura de `logs:*` e `kms:*`, além das ações de Streams na role da função `critical-notifier`.
 
-### 5. Validar na AWS
+### 4. Validar na AWS
 
 Esta lista completa as validações deixadas pela Tarefa 7.
 
@@ -127,7 +121,7 @@ Esta lista completa as validações deixadas pela Tarefa 7.
 - [ ] As três funções operam com suas roles restritas.
 - [ ] As requisições acima do limite recebem HTTP 429.
 
-### 6. Finalizar e publicar em `prod`
+### 5. Finalizar e publicar em `prod`
 
 - [ ] Remover de `.github/workflows/deploy.yml` a linha do gatilho temporário `feature/task-06-deploy-devops` e o comentário acima dela.
 - [ ] Alinhar com o autor do PR #6, de documentação, que está em draft e altera o README.
@@ -135,7 +129,7 @@ Esta lista completa as validações deixadas pela Tarefa 7.
 - [ ] Em **Actions > Deploy**, clicar em **Review deployments** e aprovar `prod`.
 - [ ] Confirmar o e-mail de inscrição do SNS de `prod`.
 
-### 7. Entrega
+### 6. Entrega
 
 - [ ] Gravar o vídeo, usando o roteiro da seção 9 de `docs/DEPLOY_CICD.md`.
 - [ ] Atualizar a seção "Status atual" do README, que ainda indica o deploy como pendente.
