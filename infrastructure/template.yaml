@@ -345,8 +345,30 @@ Resources:
   # Amazon API Gateway
   #############################################################################
 
+  # Role de conta exigida pela AWS para access/execution logs do API Gateway
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-apigateway-cloudwatch-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+
   FeedbackApi:
     Type: AWS::Serverless::Api
+    DependsOn:
+      - ApiGatewayAccount
     Properties:
       Name: !Sub '${EnvironmentName}-feedback-api'
       StageName: !Ref EnvironmentName

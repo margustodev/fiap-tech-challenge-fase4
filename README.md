@@ -199,7 +199,7 @@ Classes principais: `AvaliacaoEntity`, `DynamoDbAvaliacaoRepository`, `Avaliacoe
 - **IAM:** role dedicada por Lambda, apenas ações necessárias (least privilege)
 - **Dados:** DynamoDB com SSE e Point-in-Time Recovery
 - **Segredos:** e-mails e parâmetros via `Parameters` do SAM (não versionar credenciais)
-- **Logs:** evitar dados sensíveis; helpers em `SecurityConfig` / `DataPrivacyHelper`
+- **Logs:** descrições mascaradas em logs via `DataPrivacyHelper` / `SecurityConfig`; parâmetros sensíveis via env (SAM Parameters)
 - **API Gateway:** métricas habilitadas; data trace desabilitado por padrão
 - **Tratamento de erros:** respostas HTTP 500 não expõem mensagens técnicas de exceções
 
@@ -337,16 +337,18 @@ sam deploy \
 
 Os módulos `common`, `feedback-receiver`, `critical-notifier` e `weekly-reporter` possuem implementações e testes automatizados.
 
-A suíte de testes foi executada com sucesso, totalizando **55 testes aprovados**, sem falhas ou erros.
+A suíte de testes foi executada com sucesso, totalizando **66 testes aprovados**, sem falhas ou erros.
 
 A infraestrutura AWS SAM está configurada, incluindo monitoramento, alarmes, dashboard e políticas de segurança IAM.
 
 As seguintes verificações locais foram concluídas:
 
 - Compilação Maven: **BUILD SUCCESS**
-- Testes automatizados: **55 aprovados**
+- Testes automatizados: **66 aprovados**
 - Empacotamento AWS SAM: **Build Succeeded**
 - Validação estática do template SAM: **Aprovada**
+
+O `critical-notifier` envia alerta por **SES e SNS** (composição dos dois canais). Stubs e TODOs órfãos foram removidos/completados.
 
 **Pendente:** realizar o deploy e validar o funcionamento dos recursos diretamente na AWS.
 
