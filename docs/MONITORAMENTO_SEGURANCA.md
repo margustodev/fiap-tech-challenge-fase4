@@ -181,13 +181,13 @@ A suíte de testes do projeto foi executada após as alterações.
 
 | Módulo | Testes aprovados |
 |---|---:|
-| common | 31 |
+| common | 37 |
 | feedback-receiver | 8 |
-| critical-notifier | 10 |
+| critical-notifier | 15 |
 | weekly-reporter | 6 |
-| **Total** | **55** |
+| **Total** | **66** |
 
-**Resultado geral:** 55 testes aprovados, sem falhas ou erros.
+**Resultado geral:** 66 testes aprovados, sem falhas ou erros.
 
 Entre os testes relacionados à Tarefa 7 estão:
 
@@ -268,7 +268,7 @@ Foram implementadas ou configuradas as seguintes melhorias:
 
 - **Monitoramento:** logs no Amazon CloudWatch, com retenção de 14 dias e métricas personalizadas em EMF;
 - **Alertas:** alarmes para erros das três funções Lambda e para erros internos tratados pela aplicação;
-- **Notificações:** integração dos alarmes com Amazon SNS;
+- **Notificações:** alertas de urgência crítica via Amazon SES e Amazon SNS; alarmes CloudWatch também notificados pelo SNS;
 - **Observabilidade:** dashboard com indicadores de invocações e erros;
 - **Segurança IAM:** revisão das permissões aplicando o princípio do menor privilégio;
 - **Proteção de dados:** criptografia em repouso e recuperação para um ponto no tempo no DynamoDB;
@@ -279,7 +279,7 @@ Foram implementadas ou configuradas as seguintes melhorias:
 
 | Verificação | Resultado |
 |---|---|
-| Testes automatizados | 55 aprovados |
+| Testes automatizados | 66 aprovados |
 | Falhas nos testes | 0 |
 | Erros nos testes | 0 |
 | Compilação Maven | BUILD SUCCESS |
