@@ -4,8 +4,7 @@ info:
   version: 1.0.0
   description: >-
     Contrato de referência do POST /avaliacao. Não é importado pelo SAM.
-    O handler usa Integer com coerções Jackson padrão; a restrição estrita de
-    tipos ainda precisa ser implementada. A URL AWS depende de deploy validado.
+    O output ApiEndpoint do CloudFormation fornece o endereço AWS com o stage e a rota.
 servers:
   - url: http://127.0.0.1:3000
     description: API local via AWS SAM
@@ -20,7 +19,7 @@ paths:
       summary: Receber e persistir uma avaliação
       description: >-
         Gera UUID, calcula urgência e persiste no DynamoDB.
-        O envio de alerta é assíncrono e não é confirmado pelo HTTP 201.
+        O alerta por SES e SNS é assíncrono.
         Não há autenticação configurada no template atual.
       requestBody:
         required: true
@@ -53,15 +52,13 @@ paths:
               example:
                 mensagem: "O campo 'nota' deve estar entre 0 e 10."
         '500':
-          description: >-
-            Falha interna capturada pelo handler. Atualmente o corpo concatena
-            a mensagem da exceção, comportamento pendente de revisão.
+          description: Falha interna. Os detalhes técnicos ficam nos logs da função.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErroResponse'
               example:
-                mensagem: 'Erro interno ao processar a avaliação: detalhe da falha'
+                mensagem: 'Erro interno ao processar a avaliação.'
 components:
   schemas:
     AvaliacaoRequest:
@@ -78,7 +75,7 @@ components:
           type: integer
           minimum: 0
           maximum: 10
-          description: Nota inteira no contrato; coerções de tipo ainda não são restringidas no mapper.
+          description: Nota inteira de 0 a 10.
     AvaliacaoResponse:
       type: object
       required: [id, descricao, nota, urgencia, dataEnvio]

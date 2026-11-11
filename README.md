@@ -1,38 +1,12 @@
 # FIAP Tech Challenge — Fase 4
 
-Sistema serverless de avaliações de cursos on-line desenvolvido para a pós-graduação em Arquitetura e Desenvolvimento em Java da FIAP. Recebe avaliações, calcula urgência, persiste no DynamoDB, envia alertas por e-mail e gera relatório semanal.
+Sistema serverless para coletar avaliações de cursos on-line, alertar administradores sobre avaliações urgentes e enviar um relatório semanal com média das notas e contagens por dia e por urgência.
 
-## Documentação
+O API Gateway recebe `POST /avaliacao`. A Lambda `feedback-receiver` valida e grava a avaliação no DynamoDB. O DynamoDB Streams aciona a `critical-notifier`, que envia alertas por SES e SNS para urgências `ALTA` e `CRITICA`. Toda segunda-feira às 12h UTC, o EventBridge aciona a `weekly-reporter` para consolidar a semana anterior e enviar o relatório por SES.
 
-| Documento | Conteúdo |
-|---|---|
-| [Arquitetura](docs/arquitetura.md) | Componentes, fluxos, camadas, dados e decisões |
-| [Funções serverless](docs/funcoes-serverless.md) | Responsabilidade, entrada, saída, dependências e falhas de cada Lambda |
-| [API](docs/api.md) | Endpoint, exemplos, respostas e limitações atuais |
-| [OpenAPI 3.0](docs/openapi.yaml) | Contrato de referência para Swagger Editor e clientes HTTP |
-| [Instalação e execução local](docs/instalacao.md) | Maven, Docker, SAM e testes |
-| [Deploy e configuração](docs/deploy.md) | Procedimento manual e parâmetros de implantação |
+## Instalação e execução local
 
-## Tecnologias e organização
-
-Java **25** (release definido no POM), Maven multimódulo, AWS SDK for Java v2, Jackson, JUnit 5 e Mockito. A arquitetura declarada no SAM utiliza Lambda, API Gateway REST, DynamoDB, SES, SNS, EventBridge e CloudWatch.
-
-| Caminho | Responsabilidade |
-|---|---|
-| `common/` | Domínio, casos de uso, DTOs, portas e persistência compartilhada |
-| `feedback-receiver/` | Lambda HTTP de recebimento de avaliações |
-| `critical-notifier/` | Lambda consumidora do DynamoDB Streams, com alertas via SES |
-| `weekly-reporter/` | Lambda de relatório semanal enviado via SES |
-| `infrastructure/` | Templates SAM/CloudFormation, configuração SAM e variáveis locais |
-| `events/` | Eventos de exemplo para invocação local |
-| `scripts/` | Inicialização e validação local em PowerShell |
-| `docs/` | Documentação técnica e checklist |
-
-O SNS recebe alarmes na infraestrutura declarada. O envio de alertas de negócio pelo adaptador SNS ainda está em TODO; o handler atual usa SES.
-
-## Início rápido
-
-Pré-requisitos: Git, JDK 25, Maven 3.9+, Docker Desktop e AWS SAM CLI compatível com `java25`. Para os scripts, PowerShell. AWS CLI e credenciais são necessários apenas para operações na AWS.
+Requisitos: JDK 25, Maven 3.9+, Docker e AWS SAM CLI com suporte ao runtime Java 25. O script de execução local usa PowerShell.
 
 ```bash
 git clone https://github.com/margustodev/fiap-tech-challenge-fase4.git
@@ -40,67 +14,57 @@ cd fiap-tech-challenge-fase4
 mvn clean package
 ```
 
-O projeto é composto por handlers Lambda; a API local é iniciada pelo SAM, sem classe `main` de servidor web.
-
-No PowerShell, com Docker ativo:
+Na raiz do repositório, com o Docker em execução:
 
 ```powershell
 .\scripts\start-api-local.ps1
 ```
 
-Em outro terminal:
+A API fica disponível em `http://127.0.0.1:3000/avaliacao`. Consulte o [guia de instalação](docs/instalacao.md) para os pré-requisitos, testes e configuração do DynamoDB Local.
 
-```powershell
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/avaliacao `
-  -ContentType 'application/json' `
-  -Body '{"descricao":"Curso com material desatualizado","nota":2}'
-```
+## API
 
-A resposta esperada é HTTP `201`, com `id`, `descricao`, `nota`, `urgencia` e `dataEnvio`. O `201` confirma a persistência; o alerta é assíncrono na AWS e seu envio não é confirmado pela resposta HTTP. O ambiente local não conecta automaticamente DynamoDB Streams ao SAM.
-
-## API e regras
-
-O único endpoint HTTP declarado é **`POST /avaliacao`**, com corpo JSON contendo `descricao` não vazia e `nota` de 0 a 10. Respostas do handler: `201`, `400` e `500`.
-
-| Nota | Urgência | Alerta de negócio |
+| Método | Rota | Sucesso |
 |---|---|---|
-| 0–2 | `CRITICA` | Sim, via SES |
-| 3–4 | `ALTA` | Sim, via SES |
-| 5–7 | `MEDIA` | Não |
-| 8–10 | `BAIXA` | Não |
-
-O relatório consulta a semana anterior completa, de segunda a domingo em UTC, e inclui média, total, quantidades por dia e urgência e detalhamento das avaliações. O template agenda a execução para segunda-feira às 12h UTC.
-
-## Testes e validação
+| POST | `/avaliacao` | `201 Created` com a avaliação persistida |
 
 ```bash
-mvn test
+curl -i http://127.0.0.1:3000/avaliacao \
+  -H 'Content-Type: application/json' \
+  -d '{"descricao":"Curso com material desatualizado","nota":2}'
 ```
 
-Para gerar os três JARs com suas dependências, execute `mvn clean package` na raiz. Para validar persistência com DynamoDB Local:
+A nota vai de 0 a 10. O [contrato da API](docs/api.md) descreve as regras de urgência, os campos da resposta e os erros. O [OpenAPI](docs/openapi.yaml) reúne os schemas e exemplos.
 
-```powershell
-.\scripts\validate-dynamodb-local.ps1
-```
+## Deploy na AWS
 
-Veja [execução local e testes](docs/instalacao.md) para a seleção explícita do teste de integração e a conferência dos relatórios Surefire.
-
-## Deploy
-
-Existe infraestrutura como código em [infrastructure/template.yaml](infrastructure/template.yaml) e uma alternativa de tabela isolada em [infrastructure/dynamodb-only.yaml](infrastructure/dynamodb-only.yaml). Os parâmetros de implantação são descritos no guia de deploy.
-
-Após preparar a conta AWS e revisar o template:
+O Maven gera os JARs referenciados pelo AWS SAM. Com AWS CLI e SAM CLI configurados para a conta de destino, execute:
 
 ```bash
 mvn clean package
 cd infrastructure
-sam validate --lint --template-file template.yaml
-sam deploy --guided --template-file template.yaml
+sam deploy
 ```
 
-O SAM aponta para JARs em `target/` e declara `SkipBuild: True`; compile com Maven antes do deploy. Informe e-mails reais verificados no SES e mantenha `DynamoDbEndpoint` vazio na cloud. O procedimento completo está em [deploy](docs/deploy.md).
+O [guia de deploy](docs/deploy.md) descreve os parâmetros, os outputs do CloudFormation e os testes após uma atualização da stack.
 
-## Código-fonte
+A entrega registra a stack `fiap-tech-challenge-fase-4` implantada em `dev`, na região `us-east-1`, com a API, notificações SES/SNS e relatório semanal validados nesse ambiente.
 
-Repositório: [margustodev/fiap-tech-challenge-fase4](https://github.com/margustodev/fiap-tech-challenge-fase4).
+## Estrutura do repositório
 
+| Caminho | Conteúdo |
+|---|---|
+| `pom.xml` | Build Maven multimódulo |
+| `common/` | Domínio, casos de uso, DTOs, portas e persistência DynamoDB |
+| `feedback-receiver/` | Lambda de recebimento de avaliações |
+| `critical-notifier/` | Lambda de alertas por SES e SNS |
+| `weekly-reporter/` | Lambda de relatório por SES |
+| `infrastructure/` | Templates AWS SAM, parâmetros de deploy e configuração local |
+| `events/` e `scripts/` | Eventos de exemplo e scripts para execução local |
+| `docs/` | Documentação técnica |
+
+## Documentação técnica
+
+- [Arquitetura e modelo de dados](docs/arquitetura.md)
+- [Funções serverless](docs/funcoes-serverless.md)
+- [Monitoramento e segurança](docs/MONITORAMENTO_SEGURANCA.md)

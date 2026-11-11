@@ -7,7 +7,7 @@
 | Ambiente | Endereço |
 |---|---|
 | Local com SAM | `http://127.0.0.1:3000/avaliacao` |
-| AWS | Obter o Output `ApiEndpoint` da stack após deploy |
+| AWS | [Consultar o output `ApiEndpoint` da stack](deploy.md#obter-o-endereço-da-api) |
 
 Somente `POST /avaliacao` está declarado no template. As funções de alerta e relatório são acionadas por eventos, sem endpoints REST. Não há GET de avaliações, health check ou frontend neste código.
 
@@ -29,7 +29,7 @@ Recebe uma avaliação e retorna o objeto persistido. Envie `Content-Type: appli
 | `descricao` | string | Sim | Não pode ser nula, vazia ou conter apenas espaços |
 | `nota` | integer | Sim | De 0 a 10, inclusive |
 
-`id`, `urgencia` e `dataEnvio` são gerados pelo servidor. Campos JSON desconhecidos são ignorados pelo `JsonMapper`. O contrato define nota inteira, mas o ObjectMapper atual não desabilita coerções padrão para `Integer`; validar/restringir notas decimais ou em string é uma pendência de aplicação. A descrição não tem tamanho máximo validado no código.
+`id`, `urgencia` e `dataEnvio` são gerados pelo servidor. Campos JSON desconhecidos são ignorados pelo `JsonMapper`. O contrato define nota inteira, mas o ObjectMapper atual não desabilita coerções padrão para `Integer`; envie a nota como um número inteiro no JSON. A descrição não tem tamanho máximo validado no código.
 
 ### Resposta 201
 
@@ -45,7 +45,7 @@ Exemplo ilustrativo; UUID e data variam a cada envio:
 }
 ```
 
-A confirmação não aguarda o alerta SES. Alertas ocorrem para notas 0–4; notas 5–7 são `MEDIA` e 8–10 são `BAIXA`.
+A confirmação da persistência ocorre antes do alerta assíncrono por SES e SNS. Alertas ocorrem para notas 0–4; notas 5–7 são `MEDIA` e 8–10 são `BAIXA`.
 
 ### Respostas de erro
 
@@ -58,7 +58,7 @@ Todas as respostas produzidas pela fábrica do handler usam `Content-Type: appli
 | `400` | Nota ausente | `O campo 'nota' é obrigatório.` |
 | `400` | Nota fora da faixa | `O campo 'nota' deve estar entre 0 e 10.` |
 | `400` | Erro de desserialização | Prefixo `JSON inválido:` seguido do detalhe Jackson |
-| `500` | Falha não tratada como validação | Prefixo `Erro interno ao processar a avaliação:` seguido da mensagem da exceção |
+| `500` | Falha não tratada como validação | `Erro interno ao processar a avaliação.` |
 
 ```json
 {
@@ -70,11 +70,11 @@ Exemplo de `500` ilustrativo:
 
 ```json
 {
-  "mensagem": "Erro interno ao processar a avaliação: detalhe da falha"
+  "mensagem": "Erro interno ao processar a avaliação."
 }
 ```
 
-Erros do API Gateway, IAM, timeout ou inicialização do runtime podem produzir respostas diferentes, como `502`; eles não são o contrato de erro gerado pelo handler. Falhas na criação das dependências podem impedir a validação de campos. O detalhe interno atualmente exposto no `500` deve ser revisto antes de uso público.
+Erros do API Gateway, IAM, timeout ou inicialização do runtime podem produzir respostas diferentes, como `502`; eles não são o contrato de erro gerado pelo handler. Falhas na criação das dependências podem impedir a validação de campos. Os detalhes técnicos das falhas internas ficam nos logs da função.
 
 ### Exemplos para teste
 

@@ -3,10 +3,14 @@ version = 0.1
 [default.deploy.parameters]
 stack_name = "fiap-tech-challenge-fase-4"
 resolve_s3 = true
+s3_bucket = "fiap-fase4-sam-448621739679"
 capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = true
 fail_on_empty_changeset = false
-parameter_overrides = "EnvironmentName=dev AdminEmail=admin@example.com SenderEmail=noreply@example.com"
+parameter_overrides = "EnvironmentName=\"dev\" AdminEmail=\"rm372428@fiap.com.br\" SenderEmail=\"docarmoj@gmail.com\" DynamoDbEndpoint=\"\""
+s3_prefix = "fiap-tech-challenge-fase-4"
+disable_rollback = true
+image_repositories = []
 
 [default.build.parameters]
 cached = true
@@ -17,3 +21,6 @@ watch = true
 
 [default.local_start_api.parameters]
 warm_containers = "EAGER"
+
+[default.global.parameters]
+region = "us-east-1"

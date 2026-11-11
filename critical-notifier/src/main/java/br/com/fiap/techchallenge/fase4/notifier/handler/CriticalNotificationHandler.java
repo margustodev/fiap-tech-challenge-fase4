@@ -1,12 +1,11 @@
-
 package br.com.fiap.techchallenge.fase4.notifier.handler;
 
-import br.com.fiap.techchallenge.fase4.application.dto.NotificacaoUrgenciaDto;
 import br.com.fiap.techchallenge.fase4.application.port.out.NotificacaoService;
-import br.com.fiap.techchallenge.fase4.domain.enums.Urgencia;
+import br.com.fiap.techchallenge.fase4.application.usecase.ProcessarNotificacaoCriticaUseCase;
 import br.com.fiap.techchallenge.fase4.domain.model.Avaliacao;
+import br.com.fiap.techchallenge.fase4.infrastructure.security.DataPrivacyHelper;
+import br.com.fiap.techchallenge.fase4.notifier.config.CriticalNotifierConfig;
 import br.com.fiap.techchallenge.fase4.notifier.infrastructure.mapper.DynamoDbStreamMapper;
-import br.com.fiap.techchallenge.fase4.notifier.infrastructure.notification.SesNotificacaoService;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -16,8 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Lambda responsavel por identificar avaliacoes criticas
- * e solicitar notificacoes aos administradores.
+ * Lambda responsável por identificar avaliações críticas
+ * e solicitar notificações aos administradores (SES e SNS).
  */
 public class CriticalNotificationHandler
         implements RequestHandler<DynamodbEvent, Void> {
@@ -26,23 +25,37 @@ public class CriticalNotificationHandler
             LoggerFactory.getLogger(CriticalNotificationHandler.class);
 
     private final DynamoDbStreamMapper mapper;
-    private final NotificacaoService notificacaoService;
+    private final ProcessarNotificacaoCriticaUseCase useCase;
+    private final DataPrivacyHelper dataPrivacyHelper;
 
     public CriticalNotificationHandler() {
-        this(new DynamoDbStreamMapper(), new SesNotificacaoService());
+        CriticalNotifierConfig config = new CriticalNotifierConfig();
+        this.mapper = config.dynamoDbStreamMapper();
+        this.useCase = config.processarNotificacaoCriticaUseCase();
+        this.dataPrivacyHelper = new DataPrivacyHelper();
     }
 
     public CriticalNotificationHandler(
             DynamoDbStreamMapper mapper,
             NotificacaoService notificacaoService) {
+        this(
+                mapper,
+                new ProcessarNotificacaoCriticaUseCase(notificacaoService),
+                new DataPrivacyHelper()
+        );
+    }
 
+    public CriticalNotificationHandler(
+            DynamoDbStreamMapper mapper,
+            ProcessarNotificacaoCriticaUseCase useCase,
+            DataPrivacyHelper dataPrivacyHelper) {
         this.mapper = mapper;
-        this.notificacaoService = notificacaoService;
+        this.useCase = useCase;
+        this.dataPrivacyHelper = dataPrivacyHelper;
     }
 
     @Override
     public Void handleRequest(DynamodbEvent event, Context context) {
-
         logger.info("Iniciando processamento das avaliacoes.");
 
         if (event == null || event.getRecords() == null) {
@@ -51,43 +64,21 @@ public class CriticalNotificationHandler
         }
 
         for (DynamodbEvent.DynamodbStreamRecord record : event.getRecords()) {
-
-            // Processa apenas registros de novas avaliacoes
             if (record == null || !"INSERT".equals(record.getEventName())) {
                 continue;
             }
 
-            // Converte os dados recebidos do DynamoDB
             Avaliacao avaliacao = mapper.toAvaliacao(record);
+            boolean notificado = useCase.executar(avaliacao);
 
-            Urgencia urgencia = avaliacao.getUrgencia();
-
-            if (urgencia == Urgencia.ALTA || urgencia == Urgencia.CRITICA) {
-
+            if (notificado) {
                 logger.info(
-                        "Avaliacao com urgencia identificada. ID: {}, Urgencia: {}",
+                        "Notificacao processada para avaliacao ID: {}, urgencia: {}, descricao: {}",
                         avaliacao.getId(),
-                        urgencia
+                        avaliacao.getUrgencia(),
+                        dataPrivacyHelper.mascararDescricao(avaliacao.getDescricao())
                 );
-
-                // Prepara os dados da notificacao
-                NotificacaoUrgenciaDto notificacao =
-                        new NotificacaoUrgenciaDto(
-                                avaliacao.getDescricao(),
-                                urgencia,
-                                avaliacao.getDataEnvio()
-                        );
-
-                // Solicita o envio do e-mail
-                notificacaoService.notificarUrgencia(notificacao);
-
-                logger.info(
-                        "Notificacao processada para avaliacao ID: {}",
-                        avaliacao.getId()
-                );
-
             } else {
-
                 logger.info(
                         "Avaliacao sem necessidade de notificacao. ID: {}",
                         avaliacao.getId()
@@ -96,7 +87,6 @@ public class CriticalNotificationHandler
         }
 
         logger.info("Processamento das avaliacoes finalizado.");
-
         return null;
     }
 }
