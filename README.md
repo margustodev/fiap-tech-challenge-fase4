@@ -2,6 +2,8 @@
 
 Sistema serverless de feedbacks de cursos on-line: recebimento de avaliações, notificações automáticas para itens críticos e relatório semanal com média e estatísticas.
 
+Link do repositório: https://github.com/margustodev/fiap-tech-challenge-fase4.git
+
 ## Modelo de cloud escolhido
 
 **AWS (Amazon Web Services)** no modelo **serverless / FaaS**, com os seguintes motivos:
@@ -15,8 +17,8 @@ Sistema serverless de feedbacks de cursos on-line: recebimento de avaliações, 
 | Agendamento | Amazon EventBridge (cron semanal) → Lambda `weekly-reporter` |
 | Notificações | Amazon SES (e-mail) e Amazon SNS (tópico de alertas) |
 | Monitoramento | Amazon CloudWatch (logs, métricas, alarms, dashboard) |
-| IaC / Deploy | AWS SAM (`infrastructure/template.yaml`) |
-| Segurança | IAM least privilege por função, SSE no DynamoDB, segredos via parameters/secrets |
+| IaC / Deploy | AWS SAM (`infrastructure/template.yaml` + `samconfig.toml`) |
+| Segurança | IAM least privilege por função, SSE no DynamoDB, parâmetros sensíveis via Parameters do SAM |
 
 ## Arquitetura da solução
 
@@ -35,7 +37,7 @@ Sistema serverless de feedbacks de cursos on-line: recebimento de avaliações, 
                               ▼
                     ┌─────────────────────┐
                     │ DynamoDB Avaliações │──Streams──► critical-notifier (Lambda 2)
-                    │ (SSE + PITR)        │             e-mail/SNS urgência
+                    │ (SSE + PITR)        │             e-mail/SNS (ALTA/CRITICA)
                     └─────────┬───────────┘
                               │
                               │ leitura semanal
@@ -52,26 +54,29 @@ Sistema serverless de feedbacks de cursos on-line: recebimento de avaliações, 
 | Função | Responsabilidade única | Trigger |
 |--------|------------------------|---------|
 | `feedback-receiver` | Receber, validar e persistir avaliação | API Gateway `POST /avaliacao` |
-| `critical-notifier` | Notificar administradores sobre urgência crítica | DynamoDB Streams (INSERT) |
+| `critical-notifier` | Notificar administradores sobre urgência ALTA ou CRITICA | DynamoDB Streams (INSERT) |
 | `weekly-reporter` | Gerar e enviar relatório semanal | EventBridge `cron(0 12 ? * MON *)` |
 
 ## Estrutura do projeto
 
 ```
-fiap-tech-challenge-fase-4/
-├── pom.xml                          # Parent Maven
-├── common/                          # Domínio, DTOs, portas, persistência DynamoDB
-├── feedback-receiver/               # Lambda de recebimento
-├── critical-notifier/               # Lambda de notificação crítica
-├── weekly-reporter/                 # Lambda de relatório semanal
-├── docs/                             # Documentação técnica
+fiap-tech-challenge-fase4/
+├── pom.xml                              # Parent Maven
+├── common/                              # Domínio, DTOs, portas, persistência DynamoDB
+├── feedback-receiver/                   # Lambda de recebimento
+├── critical-notifier/                   # Lambda de notificação crítica
+├── weekly-reporter/                     # Lambda de relatório semanal
+├── docs/                                # Documentação técnica
 │   └── MONITORAMENTO_SEGURANCA.md
-├── events/                          # Payloads de exemplo para sam local invoke
-├── scripts/validate-dynamodb-local.ps1
+├── events/                              # Payloads de exemplo para sam local invoke
+├── scripts/
+│   ├── start-api-local.ps1              # Sobe API local (SAM + DynamoDB Local)
+│   └── validate-dynamodb-local.ps1
 └── infrastructure/
-    ├── template.yaml                # Stack completo (SAM)
-    ├── dynamodb-only.yaml           # Somente tabela DynamoDB
-    └── samconfig.toml
+    ├── template.yaml                    # Stack completo (SAM)
+    ├── dynamodb-only.yaml               # Somente tabela DynamoDB
+    ├── env-local.json                   # Variáveis para sam local
+    └── samconfig.toml                   # Parâmetros salvos do deploy
 ```
 
 Pacote base: `br.com.fiap.techchallenge.fase4`
@@ -114,9 +119,7 @@ aws cloudformation deploy \
   --stack-name fiap-fase4-dynamodb \
   --parameter-overrides EnvironmentName=dev
 
-# Ou stack completo (API + Lambdas + tabela)
-cd infrastructure
-sam deploy --guided
+# Ou stack completo (API + Lambdas + tabela) — ver seção "Instruções de deploy"
 ```
 
 ### Validar persistência e recuperação
@@ -185,7 +188,7 @@ Classes principais: `AvaliacaoEntity`, `DynamoDbAvaliacaoRepository`, `Avaliacoe
 - **Módulo:** `critical-notifier`
 - **Handler:** `br.com.fiap.techchallenge.fase4.notifier.handler.CriticalNotificationHandler`
 - **Entrada:** `DynamodbEvent`
-- **Fluxo:** ler NewImage → filtrar urgência ALTA/CRITICA → enviar SES/SNS
+- **Fluxo:** ler NewImage → filtrar urgência ALTA/CRITICA → enviar SES e SNS
 
 ### 3. WeeklyReportHandler
 
@@ -198,8 +201,8 @@ Classes principais: `AvaliacaoEntity`, `DynamoDbAvaliacaoRepository`, `Avaliacoe
 
 - **IAM:** role dedicada por Lambda, apenas ações necessárias (least privilege)
 - **Dados:** DynamoDB com SSE e Point-in-Time Recovery
-- **Segredos:** e-mails e parâmetros via `Parameters` do SAM (não versionar credenciais)
-- **Logs:** descrições mascaradas em logs via `DataPrivacyHelper` / `SecurityConfig`; parâmetros sensíveis via env (SAM Parameters)
+- **Parâmetros sensíveis:** e-mails e configurações via `Parameters` do SAM / `samconfig.toml` (não versionar credenciais AWS)
+- **Logs:** descrições mascaradas em logs via `DataPrivacyHelper` / `SecurityConfig`
 - **API Gateway:** métricas habilitadas; data trace desabilitado por padrão
 - **Tratamento de erros:** respostas HTTP 500 não expõem mensagens técnicas de exceções
 
@@ -223,7 +226,7 @@ Configurado em `infrastructure/template.yaml`:
 - JDK 25+, Maven 3.9+
 - Docker Desktop em execução
 - AWS SAM CLI (`sam --version`)
-- AWS CLI (opcional para deploy na nuvem)
+- AWS CLI (necessário para deploy na nuvem)
 
 ### 1. Build
 
@@ -260,7 +263,6 @@ $env:RUN_DYNAMODB_IT="true"
 mvn -pl common -am test "-Dtest=DynamoDbAvaliacaoRepositoryIT"
 
 # Terminal B — API (obrigatório: parameter-overrides do endpoint)
-cd C:\Project\fiap-tech-challenge-fase4
 mvn clean package -DskipTests
 cd infrastructure
 sam local start-api --port 3000 --env-vars env-local.json `
@@ -302,21 +304,40 @@ sam local invoke WeeklyReporterFunction -e ../events/schedule.json
 
 ## Instruções de deploy
 
-### Pré-requisitos adicionais (nuvem)
+O deploy é automatizado via **AWS SAM** (`infrastructure/template.yaml`), com parâmetros salvos em `infrastructure/samconfig.toml` (stack `fiap-tech-challenge-fase-4`, região `us-east-1`).
+
+O template usa `SkipBuild: True` e aponta para os JARs gerados pelo Maven. Por isso o build Maven é obrigatório **antes** do `sam deploy`.
+
+### Pré-requisitos (nuvem)
 
 - AWS CLI configurado (`aws configure`)
-- E-mails verificados no Amazon SES (sandbox)
+- AWS SAM CLI instalado
+- Identidades de e-mail verificadas no Amazon SES (sandbox): remetente (`SenderEmail`) e destino (`AdminEmail`)
+- Confirmação da inscrição do e-mail no tópico SNS após o primeiro deploy
 
 ### Deploy (SAM)
+
+```bash
+# 1. Empacotar as Lambdas (JARs em */target)
+mvn clean package
+
+# 2. Implantar / atualizar o stack
+cd infrastructure
+sam deploy
+```
+
+Na primeira vez (ou para alterar parâmetros), use o modo guiado:
 
 ```bash
 cd infrastructure
 sam deploy --guided
 ```
 
-Ou com parâmetros:
+Ou com parâmetros explícitos:
 
 ```bash
+mvn clean package
+cd infrastructure
 sam deploy \
   --stack-name fiap-tech-challenge-fase-4 \
   --capabilities CAPABILITY_NAMED_IAM \
@@ -324,8 +345,34 @@ sam deploy \
   --parameter-overrides \
     EnvironmentName=dev \
     AdminEmail=seu-admin@email.com \
-    SenderEmail=seu-remetente@email.com
+    SenderEmail=seu-remetente@email.com \
+    DynamoDbEndpoint=
 ```
+
+### Pós-deploy
+
+1. Confirme a inscrição do e-mail no SNS (mensagem enviada pela AWS).
+2. Obtenha o endpoint da API:
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name fiap-tech-challenge-fase-4 \
+  --region us-east-1 \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
+  --output text
+```
+
+3. Teste o recebimento de avaliação:
+
+```powershell
+$api = "https://<api-id>.execute-api.us-east-1.amazonaws.com/dev/avaliacao"
+Invoke-RestMethod -Method Post -Uri $api `
+  -ContentType "application/json" `
+  -Body '{"descricao":"Curso com material desatualizado","nota":2}'
+```
+
+4. Valide no console AWS: tabela `dev-avaliacoes`, Lambdas ativas, dashboard `dev-feedback-dashboard`, e-mail SES/SNS de urgência ALTA/CRITICA.
+5. Para o relatório semanal sem aguardar a segunda-feira 12:00 UTC, invoque `dev-weekly-reporter` manualmente no console ou via CLI.
 
 ## Artefatos de entrega
 
@@ -339,17 +386,24 @@ Os módulos `common`, `feedback-receiver`, `critical-notifier` e `weekly-reporte
 
 A suíte de testes foi executada com sucesso, totalizando **66 testes aprovados**, sem falhas ou erros.
 
-A infraestrutura AWS SAM está configurada, incluindo monitoramento, alarmes, dashboard e políticas de segurança IAM.
+A infraestrutura AWS SAM está implantada e validada na AWS (`CREATE_COMPLETE`):
 
-As seguintes verificações locais foram concluídas:
+| Item | Valor |
+|------|-------|
+| Stack | `fiap-tech-challenge-fase-4` |
+| Região | `us-east-1` |
+| Ambiente | `dev` |
+| Tabela | `dev-avaliacoes` |
+| Dashboard | `dev-feedback-dashboard` |
+
+Verificações concluídas:
 
 - Compilação Maven: **BUILD SUCCESS**
 - Testes automatizados: **66 aprovados**
-- Empacotamento AWS SAM: **Build Succeeded**
-- Validação estática do template SAM: **Aprovada**
+- Empacotamento / template SAM: **validado**
+- Deploy na AWS: **concluído e em funcionamento**
+- API (`POST /avaliacao`), notificações (SES + SNS) e relatório semanal: **validados no ambiente cloud**
 
-O `critical-notifier` envia alerta por **SES e SNS** (composição dos dois canais). Stubs e TODOs órfãos foram removidos/completados.
-
-**Pendente:** realizar o deploy e validar o funcionamento dos recursos diretamente na AWS.
+O `critical-notifier` envia alerta por **SES e SNS** (composição dos dois canais).
 
 A documentação técnica da Tarefa 7 está disponível em [Monitoramento e Segurança](docs/MONITORAMENTO_SEGURANCA.md).
