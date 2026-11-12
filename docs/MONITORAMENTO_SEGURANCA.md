@@ -59,7 +59,7 @@ As métricas são emitidas como eventos JSON nos logs da função Lambda.
 
 Foram criados testes automatizados para verificar o formato EMF e a rejeição de nomes e valores inválidos.
 
-A disponibilização efetiva das métricas no CloudWatch precisa ser verificada após o deploy.
+No CloudWatch, filtre pelo namespace e pela dimensão acima para consultar as métricas do recebimento.
 
 ## 3. Alarmes e notificações
 
@@ -82,7 +82,7 @@ Os alarmes estão associados ao tópico SNS `CriticalAlertsTopic`.
 
 O destinatário das notificações é configurado pelo parâmetro `AdminEmail`.
 
-**Observação:** após o deploy, será necessário confirmar a inscrição de e-mail no SNS e testar a entrega das notificações.
+A entrega de mensagens por e-mail requer a confirmação da inscrição no tópico SNS.
 
 ## 4. Dashboard de monitoramento
 
@@ -95,7 +95,7 @@ O dashboard apresenta indicadores relacionados a:
 
 O painel permite acompanhar o comportamento geral da aplicação e auxiliar na identificação de falhas.
 
-A apresentação de métricas reais dependerá da implantação e execução das funções na AWS.
+Em `dev`, o dashboard está disponível como `dev-feedback-dashboard`.
 
 ## 5. Segurança e controle de acesso
 
@@ -114,8 +114,6 @@ As permissões foram revisadas para manter apenas as operações necessárias ao
 As permissões do DynamoDB foram limitadas aos recursos correspondentes.
 
 No envio de e-mails pelo Amazon SES, foi configurada uma condição para restringir o endereço remetente ao valor informado em `SenderEmail`.
-
-Essas configurações foram validadas estaticamente no template SAM, mas ainda precisam ser verificadas durante a execução na AWS.
 
 ### 5.2. Proteção dos dados no DynamoDB
 
@@ -164,10 +162,6 @@ O template utiliza parâmetros para configurações como:
 - `AdminEmail`;
 - `SenderEmail`;
 - `DynamoDbEndpoint`.
-
-Credenciais e segredos não devem ser inseridos diretamente no código-fonte nem versionados no repositório Git.
-
-Caso a aplicação passe a exigir armazenamento de credenciais, recomenda-se utilizar um serviço específico de gerenciamento de segredos.
 
 ## 6. Testes automatizados
 
@@ -230,23 +224,9 @@ Comando executado:
 
 Essas verificações confirmam a compilação e a validade estática da infraestrutura, mas não substituem os testes em ambiente AWS.
 
-## 8. Validações pendentes na AWS
+## 8. Ambiente implantado
 
-Até esta etapa, os testes foram realizados localmente.
-
-Ainda será necessário verificar:
-
-- Criação dos grupos de logs e retenção configurada;
-- Recebimento dos logs de acesso do API Gateway;
-- Publicação e visualização das métricas EMF;
-- Funcionamento dos quatro alarmes;
-- Entrega das notificações pelo SNS;
-- Visualização de dados reais no dashboard;
-- Funcionamento das três Lambdas com as IAM Roles restritas;
-- Ausência de conflitos com grupos de logs preexistentes;
-- Configuração de permissões necessárias para os logs do API Gateway.
-
-Essas atividades deverão ser consideradas concluídas somente após a validação efetiva na AWS.
+A entrega registra a stack `fiap-tech-challenge-fase-4` implantada em `dev`, na região `us-east-1`, com validação da API, dos alertas SES/SNS e do relatório semanal. Consulte o [guia de deploy](deploy.md#verificar-uma-atualização) para repetir as verificações após atualizar a stack.
 
 ## 9. Arquivos principais
 
@@ -285,7 +265,5 @@ Foram implementadas ou configuradas as seguintes melhorias:
 | Compilação Maven | BUILD SUCCESS |
 | Empacotamento AWS SAM | Build Succeeded |
 | Validação do template SAM | Aprovada |
-
-A Tarefa 7 está implementada e validada localmente. A confirmação do funcionamento dos recursos provisionados permanece pendente de testes no ambiente AWS.
 
 Esta documentação registra as funcionalidades desenvolvidas, os mecanismos de segurança adotados e as verificações necessárias para apoiar a manutenção e evolução da solução.
